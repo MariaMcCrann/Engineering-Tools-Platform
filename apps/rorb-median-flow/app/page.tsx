@@ -1,0 +1,228 @@
+"use client";
+
+import { ChangeEvent, DragEvent, useMemo, useRef, useState } from "react";
+
+type Peak = { key: string; description: string };
+type Row = {
+  run: number;
+  duration: string;
+  durationMinutes: number;
+  aep: string;
+  aepValue: number;
+  temporalPattern: number | null;
+  rain: number;
+  arf: number;
+  peaks: Record<string, number>;
+};
+type Parsed = {
+  fileName: string;
+  modelVersion: string;
+  runDate: string;
+  catchment: string;
+  kc: string;
+  m: string;
+  loss: string;
+  patternMode: string;
+  peaks: Peak[];
+  rows: Row[];
+};
+type Result = {
+  aep: string;
+  duration: string;
+  durationMinutes: number;
+  median: number | null;
+  selected: number;
+  temporalPattern: number | null;
+  patternCount: number;
+  status: "ok" | "single" | "incomplete";
+};
+
+const durationToMinutes = (value: number, unit: string) =>
+  unit.toLowerCase().startsWith("hour") ? value * 60 : value;
+
+function parseBatch(text: string, fileName: string): Parsed {
+  const lines = text.replace(/\r/g, "").split("\n");
+  const field = (label: string) => {
+    const line = lines.find((l) => l.trim().startsWith(label));
+    return line?.split(":").slice(1).join(":").trim() ?? "—";
+  };
+
+  const peakDescriptions = new Map<string, string>();
+  let inPeakBlock = false;
+  for (const line of lines) {
+    if (/^\s*Peak\s+Description\s*$/.test(line)) { inPeakBlock = true; continue; }
+    if (inPeakBlock && /^\s*Run\s+Duration/.test(line)) break;
+    const match = inPeakBlock && line.match(/^\s*(\d+)\s+(.+?)\s*$/);
+    if (match) peakDescriptions.set(`Peak${match[1].padStart(4, "0")}`, match[2].trim());
+  }
+
+  const headerIndex = lines.findIndex((l) => /^\s*Run\s+Duration/.test(l));
+  if (headerIndex < 0) throw new Error("The RORB results table could not be found.");
+  const header = lines[headerIndex];
+  const peakKeys = [...header.matchAll(/Peak\d+/g)].map((m) => m[0]);
+  if (!peakKeys.length) throw new Error("No peak-flow columns were found.");
+  const hasTP = /\bTPat\b|Temporal\s*Pattern/i.test(header);
+  const hasFilteringColumns = /%Filtered/i.test(header) && /TempPatFiltering/i.test(header);
+  const rows: Row[] = [];
+
+  for (const line of lines.slice(headerIndex + 1)) {
+    if (/Elapsed Run Time/i.test(line)) break;
+    if (!/^\s*\d+\s+/.test(line)) continue;
+    const bits = line.trim().split(/\s+/);
+    let i = 0;
+    const run = Number(bits[i++]);
+    const durationValue = Number(bits[i++]);
+    const durationUnit = bits[i++];
+    const aep = bits[i++];
+    const temporalPattern = hasTP ? Number(bits[i++]) : null;
+    if (hasFilteringColumns) {
+      i += 2; // %Filtered and TempPatFiltering (Y/N)
+    }
+    const rain = Number(bits[i++]);
+    const arf = Number(bits[i++]);
+    const values = bits.slice(i).map(Number);
+    if (![run, durationValue, rain, arf, ...values].every(Number.isFinite)) continue;
+    rows.push({
+      run,
+      duration: `${durationValue} ${durationUnit}`,
+      durationMinutes: durationToMinutes(durationValue, durationUnit),
+      aep,
+      aepValue: Number(aep.replace("%", "")),
+      temporalPattern,
+      rain,
+      arf,
+      peaks: Object.fromEntries(peakKeys.map((key, index) => [key, values[index]])),
+    });
+  }
+  if (!rows.length) throw new Error("No valid RORB run rows were found.");
+  const parameterLine = lines.find((l) => /Parameters:\s+kc/i.test(l)) ?? "";
+  const params = parameterLine.match(/kc\s*=\s*([\d.]+).*?m\s*=\s*([\d.]+)/i);
+  const lossIndex = lines.findIndex((l) => /Loss parameters\s+Initial loss/i.test(l));
+  const lossValues = lossIndex >= 0 ? lines[lossIndex + 1]?.trim().split(/\s+/) : [];
+  return {
+    fileName,
+    modelVersion: field("Program version").split("(")[0].trim(),
+    runDate: field("Date run"),
+    catchment: field("Catchment file").split(/[\\/]/).pop() ?? "—",
+    kc: params?.[1] ?? "—",
+    m: params?.[2] ?? "—",
+    loss: lossValues?.length >= 2 ? `${lossValues[0]} mm / ${lossValues[1]} mm/h` : "—",
+    patternMode: field("Temporal pattern"),
+    peaks: peakKeys.map((key) => ({ key, description: peakDescriptions.get(key) ?? key })),
+    rows,
+  };
+}
+
+function calculate(parsed: Parsed, peakKey: string): Result[] {
+  const groups = new Map<string, Row[]>();
+  for (const row of parsed.rows) {
+    const key = `${row.aep}|${row.durationMinutes}`;
+    groups.set(key, [...(groups.get(key) ?? []), row]);
+  }
+  const byAep = new Map<string, Result[]>();
+  for (const rows of groups.values()) {
+    const sorted = rows.map((r) => ({ row: r, flow: r.peaks[peakKey] })).sort((a, b) => a.flow - b.flow);
+    const n = sorted.length;
+    const median = n > 1
+      ? n % 2 ? sorted[(n - 1) / 2].flow : (sorted[n / 2 - 1].flow + sorted[n / 2].flow) / 2
+      : null;
+    const oneUp = median === null ? sorted[0] : sorted.find((item) => item.flow > median) ?? sorted[n - 1];
+    const item: Result = {
+      aep: rows[0].aep,
+      duration: rows[0].duration,
+      durationMinutes: rows[0].durationMinutes,
+      median,
+      selected: oneUp.flow,
+      temporalPattern: oneUp.row.temporalPattern,
+      patternCount: n,
+      status: n === 1 ? "single" : n === 10 ? "ok" : "incomplete",
+    };
+    byAep.set(item.aep, [...(byAep.get(item.aep) ?? []), item]);
+  }
+  return [...byAep.values()]
+    .map((items) => items.sort((a, b) => b.selected - a.selected)[0])
+    .sort((a, b) => Number(b.aep.replace("%", "")) - Number(a.aep.replace("%", "")));
+}
+
+const fmt = (n: number | null) => n === null ? "—" : n.toFixed(4);
+
+export default function Home() {
+  const [parsed, setParsed] = useState<Parsed | null>(null);
+  const [peakKey, setPeakKey] = useState("");
+  const [project, setProject] = useState("");
+  const [error, setError] = useState("");
+  const [dragging, setDragging] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const results = useMemo(() => parsed && peakKey ? calculate(parsed, peakKey) : [], [parsed, peakKey]);
+
+  const loadFile = async (file?: File) => {
+    if (!file) return;
+    setError("");
+    try {
+      const next = parseBatch(await file.text(), file.name);
+      setParsed(next);
+      setPeakKey(next.peaks[0]?.key ?? "");
+    } catch (e) {
+      setParsed(null);
+      setError(e instanceof Error ? e.message : "The file could not be processed.");
+    }
+  };
+  const onDrop = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault(); setDragging(false); loadFile(event.dataTransfer.files[0]);
+  };
+  const exportCsv = () => {
+    if (!results.length) return;
+    const lines = ["AEP,Critical duration,Median flow,Selected flow,Temporal pattern,Pattern count,Status"];
+    results.forEach((r) => lines.push([r.aep, r.duration, r.median ?? "", r.selected, r.temporalPattern ?? "", r.patternCount, r.status].join(",")));
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv" }));
+    a.download = `${project.trim().replace(/[^a-z0-9_-]+/gi, "_") || "RORB"}_median_flow.csv`;
+    a.click(); URL.revokeObjectURL(a.href);
+  };
+  const maxFlow = Math.max(...results.map((r) => r.selected), 1);
+
+  return (
+    <main className="app-shell">
+      <aside className="sidebar">
+        <div className="brand"><span className="personal-mark">ET</span><span>ENGINEERING<br/>TOOLS</span></div>
+        <div className="tool-nav"><button className="back">◀ &nbsp; All Tools</button><button className="active-tool">RORB Median Flow</button></div>
+        <div className="version">ENGINEERING TOOL<br/><strong>Version 1.0</strong></div>
+      </aside>
+
+      <section className="workspace">
+        <header className="top-tabs"><button className="selected">New Analysis</button><button disabled>Projects</button><button disabled>Model QA</button></header>
+        <div className="content">
+          <div className="title-row"><div><p className="eyebrow">RORB RESULTS PROCESSOR</p><h1>Median Flow Analysis</h1><p className="subtitle">Upload a RORB batch output to identify the 1-up median flow and critical duration.</p></div><span className="condition-pill">Existing Conditions</span></div>
+
+          <div className="form-grid">
+            <label>Project Name<input value={project} onChange={(e) => setProject(e.target.value)} placeholder="e.g. 555_01 Project Name" /></label>
+            <label>Hydrograph Location<select value={peakKey} onChange={(e) => setPeakKey(e.target.value)} disabled={!parsed}>{parsed?.peaks.map((p) => <option value={p.key} key={p.key}>{p.description}</option>) ?? <option>Upload a file first</option>}</select></label>
+          </div>
+
+          <section className="upload-card">
+            <div className="card-head"><div><h2>Existing Conditions</h2><p>RORB batch output file</p></div>{parsed && <span className="valid">✓ File validated</span>}</div>
+            <div className={`dropzone ${dragging ? "dragging" : ""} ${parsed ? "loaded" : ""}`} onDragOver={(e) => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={onDrop} onClick={() => inputRef.current?.click()} role="button" tabIndex={0} onKeyDown={(e) => e.key === "Enter" && inputRef.current?.click()}>
+              <input ref={inputRef} hidden type="file" accept=".out,.txt" onChange={(e: ChangeEvent<HTMLInputElement>) => loadFile(e.target.files?.[0])}/>
+              <div className="upload-icon">⇧</div><strong>{parsed ? parsed.fileName : "Drop batch.out here or click to browse"}</strong><span>{parsed ? `${parsed.rows.length} runs · ${parsed.peaks.length} hydrograph location${parsed.peaks.length === 1 ? "" : "s"}` : "RORB .out files up to 20 MB"}</span>
+            </div>
+            {error && <div className="error">⚠ {error}</div>}
+          </section>
+
+          {parsed && <>
+            <section className="model-strip">
+              <div><span>RORB Version</span><strong>{parsed.modelVersion}</strong></div><div><span>Run Date</span><strong>{parsed.runDate}</strong></div><div><span>Catchment</span><strong>{parsed.catchment}</strong></div><div><span>kc / m</span><strong>{parsed.kc} / {parsed.m}</strong></div><div><span>Initial / Continuing Loss</span><strong>{parsed.loss}</strong></div>
+            </section>
+
+            {results.some((r) => r.status === "single") && <div className="warning"><div>!</div><p><strong>Median flow cannot be calculated from this run.</strong><br/>This file contains one temporal pattern per AEP and duration. Run the ARR temporal-pattern ensemble in RORB and upload the resulting batch output. The table below shows maximum single-pattern flows for checking only.</p></div>}
+
+            <div className="results-head"><div><p className="eyebrow">ANALYSIS RESULTS</p><h2>Critical flows by AEP</h2></div><button className="export" onClick={exportCsv}>↓ Export CSV</button></div>
+            <section className="results-grid">
+              <div className="table-card"><table><thead><tr><th>AEP</th><th>Critical duration</th><th>Median</th><th>1-up median / peak</th><th>TP</th><th>Check</th></tr></thead><tbody>{results.map((r) => <tr key={r.aep}><td><strong>{r.aep}</strong></td><td>{r.duration}</td><td>{fmt(r.median)}</td><td className="flow">{fmt(r.selected)} <small>m³/s</small></td><td>{r.temporalPattern ? `TP${r.temporalPattern}` : "—"}</td><td><span className={`status ${r.status}`}>{r.status === "ok" ? "OK" : r.status === "single" ? "1 pattern" : `${r.patternCount} patterns`}</span></td></tr>)}</tbody></table></div>
+              <div className="chart-card"><h3>Critical flow profile</h3><p>Selected peak flow by AEP (m³/s)</p><div className="bars">{results.map((r) => <div className="bar-row" key={r.aep}><span>{r.aep}</span><div><i style={{width: `${Math.max(3, r.selected / maxFlow * 100)}%`}}></i></div><strong>{r.selected.toFixed(2)}</strong></div>)}</div></div>
+            </section>
+          </>}
+        </div>
+      </section>
+    </main>
+  );
+}
