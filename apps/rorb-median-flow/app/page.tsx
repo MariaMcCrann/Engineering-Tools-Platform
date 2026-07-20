@@ -147,6 +147,7 @@ function calculate(parsed: Parsed, peakKey: string): Result[] {
 const fmt = (n: number | null) => n === null ? "—" : n.toFixed(4);
 
 export default function Home() {
+  const [view, setView] = useState<"tools" | "rorb">("rorb");
   const [parsed, setParsed] = useState<Parsed | null>(null);
   const [peakKey, setPeakKey] = useState("");
   const [project, setProject] = useState("");
@@ -184,12 +185,35 @@ export default function Home() {
   return (
     <main className="app-shell">
       <aside className="sidebar">
-        <div className="brand"><span className="personal-mark">ET</span><span>ENGINEERING<br/>TOOLS</span></div>
-        <div className="tool-nav"><button className="back">◀ &nbsp; All Tools</button><button className="active-tool">RORB Median Flow</button></div>
+        <div className="brand"><img className="personal-mark" src="/brand-mark.svg" alt=""/><span>ENGINEERING<br/>TOOLS</span></div>
+        <div className="tool-nav">
+          <button className={view === "tools" ? "nav-selected" : "back"} onClick={() => setView("tools")}>◀ &nbsp; All Tools</button>
+          <button className={view === "rorb" ? "active-tool" : ""} onClick={() => setView("rorb")}>RORB Median Flow</button>
+        </div>
         <div className="version">ENGINEERING TOOL<br/><strong>Version 1.0</strong></div>
       </aside>
 
       <section className="workspace">
+        {view === "tools" ? (
+          <>
+            <header className="hub-header"><span>Engineering Tools</span></header>
+            <div className="content hub-content">
+              <p className="eyebrow">PERSONAL ENGINEERING WORKSPACE</p>
+              <h1>All Tools</h1>
+              <p className="subtitle">Open a calculator or see what is being added to the platform.</p>
+              <section className="tool-grid">
+                <button className="tool-card available" onClick={() => setView("rorb")}>
+                  <span className="tool-icon">MF</span>
+                  <span><strong>RORB Median Flow</strong><small>Process temporal-pattern ensembles and identify critical flows.</small></span>
+                  <b>Open →</b>
+                </button>
+                <div className="tool-card"><span className="tool-icon">CF</span><span><strong>Channel Flow</strong><small>Trapezoidal channel flow calculations.</small></span><b>Coming soon</b></div>
+                <div className="tool-card"><span className="tool-icon">SS</span><span><strong>Stage Storage</strong><small>Stage-storage calculations and outputs.</small></span><b>Coming soon</b></div>
+                <div className="tool-card"><span className="tool-icon">PT</span><span><strong>Proposal Tool</strong><small>Prepare consistent consultancy proposals.</small></span><b>In development</b></div>
+              </section>
+            </div>
+          </>
+        ) : <>
         <header className="top-tabs"><button className="selected">New Analysis</button><button disabled>Projects</button><button disabled>Model QA</button></header>
         <div className="content">
           <div className="title-row"><div><p className="eyebrow">RORB RESULTS PROCESSOR</p><h1>Median Flow Analysis</h1><p className="subtitle">Upload a RORB batch output to identify the 1-up median flow and critical duration.</p></div><span className="condition-pill">Existing Conditions</span></div>
@@ -222,6 +246,7 @@ export default function Home() {
             </section>
           </>}
         </div>
+        </>}
       </section>
     </main>
   );
