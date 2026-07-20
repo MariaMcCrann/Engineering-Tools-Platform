@@ -13,14 +13,14 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Starter Project",
-  description: "A clean starting point for building your site.",
+  title: "Engineering Tools | RORB Median Flow",
+  description: "Personal engineering calculation tools.",
   other: {
     "codex-preview": "development",
   },
   icons: {
-    icon: "/favicon.svg",
-    shortcut: "/favicon.svg",
+    icon: "/brand-mark.svg",
+    shortcut: "/brand-mark.svg",
   },
 };
 
