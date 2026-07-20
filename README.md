@@ -1,17 +1,37 @@
 # Engineering Tools Platform
 
-A private collection of browser-based civil engineering calculation and workflow tools.
+A private, unified collection of browser-based civil engineering calculation and workflow tools.
 
-## Applications
+## Tools included
 
-- [RORB Median Flow](apps/rorb-median-flow/) — processes RORB batch output files, calculates the 1-up median flow for each duration, and identifies the critical duration and temporal pattern.
-- Channel Flow Calculator — planned migration from `Trapezoid-Tool`.
-- Stage Storage Calculator — planned migration from `Trapezoid-Tool`.
-- Proposal Tool — maintained separately while its Python document-generation engine is under development.
+- **RORB Median Flow** — processes RORB batch output files, calculates the 1-up median flow for each duration, and identifies the critical duration and temporal pattern.
+- **Channel Flow** — calculates trapezoidal channel capacity using Manning's equation and displays a cross-section.
+- **Stage Storage** — calculates basin stage, area and storage tables and displays a cross-section.
+- **Proposal Tool** — sends RFQ documents to the established proposal-analysis and document-generation service.
 
-## Structure
+All four tools are available from the **All Tools** screen and the persistent left navigation.
 
-Each tool lives in its own folder under `apps/`. Shared navigation and visual components can be introduced as the platform grows.
+## Railway deployment
+
+Create a Railway service from this repository and configure:
+
+1. **Root Directory:** `/apps/rorb-median-flow`
+2. **Config file path:** `/apps/rorb-median-flow/railway.json`
+3. **Environment variable:**
+   `NEXT_PUBLIC_PROPOSAL_PROCESS_URL=https://rain-proposal-tool-production.up.railway.app/process`
+4. Generate a public Railway domain after the deployment becomes healthy.
+
+The Railway configuration runs a standard Next.js production build and binds the server to Railway's `PORT`.
+
+The proposal analysis remains a separate backend service. The environment variable allows its address to be changed without editing application code.
+
+## Local development
+
+```bash
+cd apps/rorb-median-flow
+npm install
+npm run dev
+```
 
 ## Privacy
 
