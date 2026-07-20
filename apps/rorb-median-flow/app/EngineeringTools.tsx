@@ -1,0 +1,66 @@
+"use client";
+
+import { ChangeEvent, useMemo, useState } from "react";
+
+const n = (value: string) => Number(value);
+const fmt = (value: number, digits = 2) => Number.isFinite(value) ? value.toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits }) : "—";
+
+function Field({ label, value, unit, hint, onChange }: { label: string; value: string; unit?: string; hint?: string; onChange: (value: string) => void }) {
+  return <label className="calc-field"><span>{label}</span>{hint && <small>{hint}</small>}<input type="number" step="any" value={value} onChange={(e) => onChange(e.target.value)} />{unit && <i>{unit}</i>}</label>;
+}
+
+function Section({ number, title, children }: { number: number; title: string; children: React.ReactNode }) {
+  return <section className="calc-card"><div className="calc-card-title"><b>{number}</b><h2>{title}</h2></div>{children}</section>;
+}
+
+export function ChannelFlowTool() {
+  const [depth, setDepth] = useState("1"); const [width, setWidth] = useState("2");
+  const [slope, setSlope] = useState("0.0155"); const [side, setSide] = useState("5");
+  const [roughness, setRoughness] = useState("0.05"); const [available, setAvailable] = useState("10");
+  const [required, setRequired] = useState("");
+  const r = useMemo(() => {
+    const d=n(depth), b=n(width), s=n(slope), z=n(side), mn=n(roughness), aw=n(available);
+    if (![d,b,s,z,mn].every((v)=>v>0)) return null;
+    const area=d*z*d+d*b, sideLength=Math.sqrt((d*z)**2+d**2), perimeter=2*sideLength+b, radius=area/perimeter;
+    const capacity=(radius**0.66666*Math.sqrt(s)*area)/mn, velocity=capacity/area, topWidth=b+2*d*z;
+    return { area, perimeter, radius, capacity, velocity, topWidth, hazard:velocity*d, shear:s*radius*9810, fits:!Number.isFinite(aw)||topWidth<=aw };
+  }, [depth,width,slope,side,roughness,available]);
+  const requiredValue=n(required), capacityOk=r && required!=="" ? r.capacity>=requiredValue : null;
+  const download = () => {
+    if (!r) return;
+    const rows=[["Channel Flow Calculation","Value","Unit"],["Capacity",r.capacity,"m3/s"],["Velocity",r.velocity,"m/s"],["Top width",r.topWidth,"m"],["Area",r.area,"m2"],["Hydraulic radius",r.radius,"m"],["Hazard",r.hazard,"m2/s"],["Shear stress",r.shear,"N/m2"]];
+    const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([rows.map(x=>x.join(",")).join("\n")],{type:"text/csv"})); a.download="channel-flow-calculation.csv"; a.click(); URL.revokeObjectURL(a.href);
+  };
+  return <ToolPage eyebrow="HYDRAULIC CALCULATOR" title="Channel Flow" subtitle="Trapezoidal channel capacity using Manning’s equation.">
+    <div className="calc-layout"><div>
+      <Section number={1} title="Channel geometry and slope"><div className="calc-fields"><Field label="Depth, d" value={depth} unit="m" onChange={setDepth}/><Field label="Bottom width, b" value={width} unit="m" onChange={setWidth}/><Field label="Drain slope" value={slope} unit="m/m" hint={`1 in ${fmt(1/n(slope),1)}`} onChange={setSlope}/><Field label="Side slope, 1 in X" value={side} unit="X" onChange={setSide}/><Field label="Manning’s n" value={roughness} onChange={setRoughness}/><Field label="Available top width" value={available} unit="m" onChange={setAvailable}/></div></Section>
+      <Section number={2} title="Design check (optional)"><div className="calc-fields"><Field label="Required flow capacity, Q" value={required} unit="m³/s" onChange={setRequired}/></div></Section>
+    </div><Results title="Channel flow capacity" value={r ? fmt(r.capacity) : "—"} unit="m³/s">
+      {r && <><div className="check-row">{capacityOk!==null&&<span className={capacityOk?"pass":"fail"}>{capacityOk?"✓ Capacity meets required Q":"✕ Capacity below required Q"}</span>}<span className={r.fits?"pass":"fail"}>{r.fits?"✓ Top width fits":"✕ Top width exceeds space"}</span><span className={r.hazard<=0.3?"pass":"warn"}>{r.hazard<=0.3?"✓ Hazard ≤ 0.3":"! Check hazard standard"}</span></div><Metric name="Area" value={`${fmt(r.area)} m²`}/><Metric name="Wetted perimeter" value={`${fmt(r.perimeter)} m`}/><Metric name="Hydraulic radius" value={`${fmt(r.radius,3)} m`}/><Metric name="Velocity" value={`${fmt(r.velocity)} m/s`}/><Metric name="Top width" value={`${fmt(r.topWidth)} m`}/><Metric name="Hazard (d·v)" value={`${fmt(r.hazard,3)} m²/s`}/><Metric name="Shear stress" value={`${fmt(r.shear,1)} N/m²`}/><button className="download-btn" onClick={download}>↓ Export CSV</button></>}
+    </Results></div>
+  </ToolPage>;
+}
+
+type StorageRow={stage:number;storage:number;area:number;length:number;width:number};
+function storage(depth:number,side:number,length:number,width:number,increment:number){
+  const rows:StorageRow[]=[{stage:0,storage:0,area:length*width,length,width}]; let stage=0, prevWidth=width;
+  while(stage+increment<=depth+1e-9){stage+=increment;const l=length+2*stage*side,w=width+2*stage*side;rows.push({stage,storage:.5*(prevWidth+w)*stage*l,area:l*w,length:l,width:w});prevWidth=w;}
+  return rows;
+}
+export function StageStorageTool(){
+  const [depth,setDepth]=useState("2"),[side,setSide]=useState("6"),[length,setLength]=useState("160"),[width,setWidth]=useState("160"),[increment,setIncrement]=useState("0.1"),[target,setTarget]=useState("");
+  const rows=useMemo(()=>{const values=[n(depth),n(side),n(length),n(width),n(increment)];return values.every(v=>v>0)?storage(...values as [number,number,number,number,number]):[]},[depth,side,length,width,increment]);
+  const final=rows.at(-1); const requiredLength=useMemo(()=>{if(!final||n(target)<=0)return null;let lo=n(increment),hi=Math.max(n(width),lo)*2;while(storage(n(depth),n(side),hi,n(width),n(increment)).at(-1)!.storage<n(target)&&hi<1e7)hi*=2;for(let i=0;i<60;i++){const mid=(lo+hi)/2;if(storage(n(depth),n(side),mid,n(width),n(increment)).at(-1)!.storage<n(target))lo=mid;else hi=mid;}return(lo+hi)/2},[target,final,depth,side,width,increment]);
+  const download=()=>{const csv=[["Stage (m)","Storage (m3)","Area (m2)","Length (m)","Width (m)"],...rows.map(r=>[r.stage,r.storage,r.area,r.length,r.width])].map(x=>x.join(",")).join("\n");const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));a.download="stage-storage.csv";a.click();URL.revokeObjectURL(a.href)};
+  return <ToolPage eyebrow="VOLUME CALCULATOR" title="Stage Storage" subtitle="Depth-versus-volume storage for a trapezoidal basin."><div className="calc-layout"><div><Section number={1} title="Basin geometry"><div className="calc-fields"><Field label="Depth" value={depth} unit="m" onChange={setDepth}/><Field label="Side slope, 1 in X" value={side} unit="X" onChange={setSide}/><Field label="Bottom length" value={length} unit="m" onChange={setLength}/><Field label="Bottom width" value={width} unit="m" onChange={setWidth}/><Field label="Stage increment" value={increment} unit="m" onChange={setIncrement}/></div></Section><Section number={2} title="Target storage (optional)"><div className="calc-fields"><Field label="Target storage volume" value={target} unit="m³" onChange={setTarget}/></div>{requiredLength&&<p className="answer-note">Required bottom length: <strong>{fmt(requiredLength)} m</strong></p>}</Section><Section number={3} title="Stage / storage / area table"><div className="storage-table"><table><thead><tr><th>Stage</th><th>Storage</th><th>Area</th><th>Length</th><th>Width</th></tr></thead><tbody>{rows.map(r=><tr key={r.stage}><td>{fmt(r.stage)}</td><td>{fmt(r.storage,1)}</td><td>{fmt(r.area,1)}</td><td>{fmt(r.length,1)}</td><td>{fmt(r.width,1)}</td></tr>)}</tbody></table></div></Section></div><Results title={`Storage at full depth (${depth} m)`} value={final?fmt(final.storage,0):"—"} unit="m³">{final&&<><Metric name="Bottom area" value={`${fmt(n(length)*n(width),1)} m²`}/><Metric name="Top length" value={`${fmt(final.length)} m`}/><Metric name="Top width" value={`${fmt(final.width)} m`}/><Metric name="Top area" value={`${fmt(final.area,1)} m²`}/><button className="download-btn" onClick={download}>↓ Export stage-storage CSV</button></>}</Results></div></ToolPage>;
+}
+
+export function ProposalTool(){
+  const [project,setProject]=useState(""),[proposal,setProposal]=useState(""),[files,setFiles]=useState<File[]>([]),[mode,setMode]=useState<"quick"|"full">("quick"),[research,setResearch]=useState(false);
+  const change=(e:ChangeEvent<HTMLInputElement>)=>setFiles(Array.from(e.target.files??[]));
+  return <ToolPage eyebrow="PROPOSAL WORKSPACE" title="New Proposal" subtitle="Add project details and RFQ files to prepare a proposal package."><div className="proposal-layout"><Section number={1} title="Project details"><div className="proposal-fields"><label>Project number<input value={project} onChange={e=>setProject(e.target.value)} placeholder="e.g. 716_01"/></label><label>Proposal number<input value={proposal} onChange={e=>setProposal(e.target.value)} placeholder="e.g. 900581"/></label></div></Section><Section number={2} title="Upload RFQ"><label className="proposal-drop"><span>⇧</span><strong>{files.length?`${files.length} file${files.length===1?"":"s"} selected`:"Choose RFQ files"}</strong><small>PDF, Word or text files</small><input type="file" multiple accept=".pdf,.docx,.txt" onChange={change}/></label>{files.length>0&&<ul className="file-list">{files.map(f=><li key={f.name}>✓ {f.name}</li>)}</ul>}</Section><Section number={3} title="Choose mode"><div className="mode-cards"><button className={mode==="quick"?"selected":""} onClick={()=>setMode("quick")}><strong>Quick Review</strong><small>Extract project details, phases and deliverables</small></button><button className={mode==="full"?"selected":""} onClick={()=>setMode("full")}><strong>Full Proposal</strong><small>Prepare proposal document and fee template</small></button></div></Section><Section number={4} title="Run analysis"><label className="research-check"><input type="checkbox" checked={research} onChange={e=>setResearch(e.target.checked)}/><span><strong>Include planning research</strong><small>Check authorities and preliminary planning controls.</small></span></label><button className="run-proposal" disabled={!project||!files.length}>Run Analysis →</button><p className="engine-note">The proposal workspace is now part of Engineering Tools. Document generation will be connected to the existing Proposal Tool processing engine next.</p></Section></div></ToolPage>;
+}
+
+function ToolPage({eyebrow,title,subtitle,children}:{eyebrow:string;title:string;subtitle:string;children:React.ReactNode}){return <div className="content calc-content"><p className="eyebrow">{eyebrow}</p><h1>{title}</h1><p className="subtitle">{subtitle}</p>{children}</div>}
+function Results({title,value,unit,children}:{title:string;value:string;unit:string;children:React.ReactNode}){return <aside className="calc-results"><p>LIVE RESULTS</p><div className="result-hero"><span>{title}</span><strong>{value}<small>{unit}</small></strong></div>{children}</aside>}
+function Metric({name,value}:{name:string;value:string}){return <div className="metric"><span>{name}</span><strong>{value}</strong></div>}
