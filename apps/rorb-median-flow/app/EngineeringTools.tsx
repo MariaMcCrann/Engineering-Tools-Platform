@@ -2,6 +2,10 @@
 
 import { ChangeEvent, useMemo, useState } from "react";
 
+const PROPOSAL_PROCESS_URL =
+  process.env.NEXT_PUBLIC_PROPOSAL_PROCESS_URL ??
+  "https://rain-proposal-tool-production.up.railway.app/process";
+
 const n = (value: string) => Number(value);
 const fmt = (value: number, digits = 2) => Number.isFinite(value) ? value.toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits }) : "—";
 
@@ -81,7 +85,7 @@ export function ProposalTool(){
   const [fileCount,setFileCount]=useState(0);
   const [submitted,setSubmitted]=useState(false);
   return <ToolPage eyebrow="PROPOSAL WORKSPACE" title="New Proposal" subtitle="Runs the established Proposal Tool V2 workflow hosted on Railway.">
-    <form className="proposal-layout" action="https://rain-proposal-tool-production.up.railway.app/process" method="post" encType="multipart/form-data" target="proposal-results" onSubmit={()=>setSubmitted(true)}>
+    <form className="proposal-layout" action={PROPOSAL_PROCESS_URL} method="post" encType="multipart/form-data" target="proposal-results" onSubmit={()=>setSubmitted(true)}>
       <Section number={1} title="Project details"><div className="proposal-fields"><label>Project number<input name="project_number" value={project} onChange={e=>setProject(e.target.value)} placeholder="e.g. 716_01"/></label><label>Proposal number<input name="proposal_number" value={proposal} onChange={e=>setProposal(e.target.value)} placeholder="e.g. 900581"/></label></div></Section>
       <Section number={2} title="Upload RFQ"><label className="proposal-drop"><span>⇧</span><strong>{fileCount?`${fileCount} file${fileCount===1?"":"s"} selected`:"Choose RFQ files"}</strong><small>PDF, Word or text files</small><input type="file" name="files" multiple accept=".pdf,.docx,.txt" onChange={e=>setFileCount(e.target.files?.length??0)}/></label></Section>
       <Section number={3} title="Choose mode"><input type="hidden" name="mode" value={mode}/><div className="mode-cards"><button type="button" className={mode==="quick"?"selected":""} onClick={()=>setMode("quick")}><strong>Quick Review</strong><small>Extract project details, phases and deliverables</small></button><button type="button" className={mode==="full"?"selected":""} onClick={()=>setMode("full")}><strong>Full Proposal</strong><small>Generate the proposal document and fee template</small></button></div></Section>
