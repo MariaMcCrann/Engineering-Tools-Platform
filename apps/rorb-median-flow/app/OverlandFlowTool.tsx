@@ -8,15 +8,15 @@ type Point={x:number;z:number};
 type Side={natureWidth:number;pathWidth:number;natureFall:number;pathFall:number;boundaryFall:number};
 
 function profile(reserve:number,pavement:number,roadFall:number,kerbHeight:number,kerbWidth:number,left:Side,right:Side){
-  const verge=(reserve-pavement-2*kerbWidth)/2;
+  const verge=(reserve-pavement)/2;
   if(verge<0)throw new Error("Pavement and kerbs exceed the road reserve.");
   const lb=verge-left.natureWidth-left.pathWidth,rb=verge-right.natureWidth-right.pathWidth;
   if(lb<0||rb<0)throw new Error("Nature strip and path widths exceed the available verge.");
-  const crown=roadFall*pavement/2;
+  const roadHalf=(pavement-2*kerbWidth)/2;if(roadHalf<=0)throw new Error("Kerb widths leave no usable road pavement.");\n  const crown=roadFall*roadHalf;
   const lNature=kerbHeight+left.natureWidth*left.natureFall,lPath=lNature+left.pathWidth*left.pathFall,lBoundary=lPath+lb*left.boundaryFall;
   const rNature=kerbHeight+right.natureWidth*right.natureFall,rPath=rNature+right.pathWidth*right.pathFall,rBoundary=rPath+rb*right.boundaryFall;
   let x=0;const points:Point[]=[];const add=(width:number,z:number)=>{points.push({x,z});x+=width};
-  add(lb,lBoundary);add(left.pathWidth,lPath);add(left.natureWidth,lNature);add(kerbWidth,kerbHeight);add(pavement/2,0);add(pavement/2,crown);add(kerbWidth,0);add(right.natureWidth,kerbHeight);add(right.pathWidth,rNature);add(rb,rPath);points.push({x,z:rBoundary});
+  add(lb,lBoundary);add(left.pathWidth,lPath);add(left.natureWidth,lNature);add(kerbWidth,kerbHeight);add(roadHalf,0);add(roadHalf,crown);add(kerbWidth,0);add(right.natureWidth,kerbHeight);add(right.pathWidth,rNature);add(rb,rPath);points.push({x,z:rBoundary});
   return {points,width:x,crown};
 }
 function geometry(points:Point[],wse:number){
@@ -31,23 +31,33 @@ function Section({number,title,children}:{number:number;title:string;children:Re
 function Metric({name,value}:{name:string;value:string}){return <div className="metric"><span>{name}</span><strong>{value}</strong></div>}
 
 export function OverlandFlowTool(){
-  const [design,setDesign]=useState("3.1"),[wse,setWse]=useState("0.216"),[slope,setSlope]=useState("0.01"),[roughness,setRoughness]=useState("0.017");
+  const [design,setDesign]=useState("3.1"),[slope,setSlope]=useState("0.01"),[roughness,setRoughness]=useState("0.017");
   const [reserve,setReserve]=useState("16"),[pavement,setPavement]=useState("8"),[roadFall,setRoadFall]=useState("0.02"),[kerbHeight,setKerbHeight]=useState("0.15"),[kerbWidth,setKerbWidth]=useState("0.02");
   const [lnw,setLnw]=useState("2"),[lpw,setLpw]=useState("2"),[lnf,setLnf]=useState("0.03"),[lpf,setLpf]=useState("0.02"),[lbf,setLbf]=useState("0.02");
   const [rnw,setRnw]=useState("2"),[rpw,setRpw]=useState("2"),[rnf,setRnf]=useState("0.03"),[rpf,setRpf]=useState("0.02"),[rbf,setRbf]=useState("0.02");
-  const result=useMemo(()=>{try{const values=[reserve,pavement,roadFall,kerbHeight,kerbWidth,wse,slope,roughness].map(num);if(values.some(v=>!Number.isFinite(v)||v<0)||num(slope)<=0||num(roughness)<=0)return null;
+  const result=useMemo(()=>{try{
+    const values=[design,reserve,pavement,roadFall,kerbHeight,kerbWidth,slope,roughness,lnw,lpw,lnf,lpf,lbf,rnw,rpw,rnf,rpf,rbf].map(num);
+    if(values.some(v=>!Number.isFinite(v)||v<0)||num(slope)<=0||num(roughness)<=0)return {error:"Enter valid non-negative dimensions, with slope and Manning’s n greater than zero."} as const;
     const p=profile(num(reserve),num(pavement),num(roadFall),num(kerbHeight),num(kerbWidth),{natureWidth:num(lnw),pathWidth:num(lpw),natureFall:num(lnf),pathFall:num(lpf),boundaryFall:num(lbf)},{natureWidth:num(rnw),pathWidth:num(rpw),natureFall:num(rnf),pathFall:num(rpf),boundaryFall:num(rbf)});
-    const g=geometry(p.points,num(wse)),radius=g.perimeter?g.area/g.perimeter:0,velocity=radius?Math.pow(radius,2/3)*Math.sqrt(num(slope))/num(roughness):0,flow=velocity*g.area;
-    return {...p,...g,radius,velocity,flow,vd:velocity*num(wse),error:""};}catch(e){return {error:e instanceof Error?e.message:"Invalid geometry"} as const}},[design,wse,slope,roughness,reserve,pavement,roadFall,kerbHeight,kerbWidth,lnw,lpw,lnf,lpf,lbf,rnw,rpw,rnf,rpf,rbf]);
-  const r=result&&"flow" in result?result:null,pass=!!r&&r.flow>=num(design);
-  const download=()=>{if(!r)return;const rows=[["Road Overland Flow Calculation","Value","Unit"],["Design flow",design,"m3/s"],["Proposed WSE",wse,"m"],["Capacity",r.flow,"m3/s"],["Area",r.area,"m2"],["Wetted perimeter",r.perimeter,"m"],["Hydraulic radius",r.radius,"m"],["Velocity",r.velocity,"m/s"],["v x d",r.vd,"m2/s"]];const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([rows.map(x=>x.join(",")).join("\n")],{type:"text/csv"}));a.download="road-overland-flow.csv";a.click();URL.revokeObjectURL(a.href)};
+    const atLevel=(level:number)=>{const g=geometry(p.points,level),radius=g.perimeter?g.area/g.perimeter:0,velocity=radius?Math.pow(radius,2/3)*Math.sqrt(num(slope))/num(roughness):0;return {...g,radius,velocity,flow:velocity*g.area,vd:velocity*level}};
+    const boundaryLevel=Math.min(p.points[0].z,p.points[p.points.length-1].z);
+    const full=atLevel(boundaryLevel),target=num(design),contains=target<=full.flow+1e-9;
+    let low=0,high=boundaryLevel;
+    if(!contains){while(atLevel(high).flow<target&&high<100)high=Math.max(high*1.5,high+0.1)}
+    for(let i=0;i<80;i++){const mid=(low+high)/2;if(atLevel(mid).flow<target)low=mid;else high=mid}
+    const solvedWse=(low+high)/2;
+    const solved=atLevel(solvedWse);
+    return {...p,...solved,wse:solvedWse,boundaryLevel,totalCapacity:full.flow,contains,target,error:""};
+  }catch(e){return {error:e instanceof Error?e.message:"Invalid geometry"} as const}},[design,slope,roughness,reserve,pavement,roadFall,kerbHeight,kerbWidth,lnw,lpw,lnf,lpf,lbf,rnw,rpw,rnf,rpf,rbf]);
+  const r=result&&"flow" in result?result:null,pass=!!r&&r.contains;
+  const download=()=>{if(!r)return;const rows=[["Road Overland Flow Calculation","Value","Unit"],["Design flow",design,"m3/s"],["Calculated WSE",r.wse,"m"],["Calculated flow",r.flow,"m3/s"],["Total contained capacity",r.totalCapacity,"m3/s"],["Area",r.area,"m2"],["Wetted perimeter",r.perimeter,"m"],["Hydraulic radius",r.radius,"m"],["Velocity",r.velocity,"m/s"],["v x d",r.vd,"m2/s"]];const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([rows.map(x=>x.join(",")).join("\n")],{type:"text/csv"}));a.download="road-overland-flow.csv";a.click();URL.revokeObjectURL(a.href)};
   return <div className="content calc-content"><p className="eyebrow">ROAD HYDRAULICS</p><h1>Overland Flow</h1><p className="subtitle">Road cross-section capacity using geometric integration and Manning’s equation.</p>
     {result&&"error" in result&&result.error&&<div className="error">⚠ {result.error}</div>}
     <div className="calc-layout"><div>
-      <Section number={1} title="Flow and hydraulic parameters"><div className="calc-fields"><Field label="Design flow" value={design} unit="m³/s" onChange={setDesign}/><Field label="Proposed WSE above channel invert" value={wse} unit="m" onChange={setWse}/><Field label="Longitudinal channel slope" value={slope} unit="m/m" onChange={setSlope}/><Field label="Manning’s n" value={roughness} unit="–" onChange={setRoughness}/></div></Section>
+      <Section number={1} title="Flow and hydraulic parameters"><div className="calc-fields"><Field label="Design flow, Q" value={design} unit="m³/s" onChange={setDesign}/><Field label="Longitudinal channel slope" value={slope} unit="m/m" onChange={setSlope}/><Field label="Manning’s n" value={roughness} unit="–" onChange={setRoughness}/></div></Section>
       <Section number={2} title="Road geometry"><div className="calc-fields"><Field label="Road reserve width" value={reserve} unit="m" onChange={setReserve}/><Field label="Road pavement width" value={pavement} unit="m" onChange={setPavement}/><Field label="Road crossfall" value={roadFall} unit="m/m" onChange={setRoadFall}/><Field label="Kerb height" value={kerbHeight} unit="m" onChange={setKerbHeight}/><Field label="Kerb slope width" value={kerbWidth} unit="m" onChange={setKerbWidth}/></div></Section>
       <div className="overland-sides"><Section number={3} title="LHS — Left-hand side"><div className="calc-fields"><Field label="LHS nature strip width" value={lnw} unit="m" onChange={setLnw}/><Field label="LHS nature strip crossfall" value={lnf} unit="m/m" onChange={setLnf}/><Field label="LHS path width" value={lpw} unit="m" onChange={setLpw}/><Field label="LHS path crossfall" value={lpf} unit="m/m" onChange={setLpf}/><Field label="LHS boundary crossfall" value={lbf} unit="m/m" onChange={setLbf}/></div></Section><Section number={4} title="RHS — Right-hand side"><div className="calc-fields"><Field label="RHS nature strip width" value={rnw} unit="m" onChange={setRnw}/><Field label="RHS nature strip crossfall" value={rnf} unit="m/m" onChange={setRnf}/><Field label="RHS path width" value={rpw} unit="m" onChange={setRpw}/><Field label="RHS path crossfall" value={rpf} unit="m/m" onChange={setRpf}/><Field label="RHS boundary crossfall" value={rbf} unit="m/m" onChange={setRbf}/></div></Section></div>
-    </div><aside className="calc-results"><p>LIVE RESULTS</p><div className="result-hero"><span>Overland flow capacity</span><strong>{r?fmt(r.flow):"—"}<small>m³/s</small></strong></div>{r&&<><div className="check-row"><span className={pass?"pass":"fail"}>{pass?"✓ Capacity meets design flow":"✕ Capacity below design flow"}</span>{num(wse)>=num(kerbHeight)&&<span className="warn">! Flow above kerb</span>}</div><Metric name="Design flow" value={fmt(num(design))+" m³/s"}/><Metric name="Flow area" value={fmt(r.area)+" m²"}/><Metric name="Wetted perimeter" value={fmt(r.perimeter)+" m"}/><Metric name="Hydraulic radius" value={fmt(r.radius)+" m"}/><Metric name="Velocity" value={fmt(r.velocity)+" m/s"}/><Metric name="Top width" value={fmt(r.topWidth)+" m"}/><Metric name="Hazard (v·d)" value={fmt(r.vd)+" m²/s"}/><RoadDiagram points={r.points} width={r.width} wse={num(wse)} roadFall={num(roadFall)}/><button className="download-btn" onClick={download}>↓ Export CSV</button><p className="engine-note">Geometric profile method. Confirm survey levels, kerb detail, roughness and authority criteria before design use.</p></>}</aside></div>
+    </div><aside className="calc-results"><p>LIVE RESULTS</p><div className="result-hero"><span>Calculated water-surface elevation</span><strong>{r?fmt(r.wse):"—"}<small>m</small></strong></div>{r&&<><div className="check-row"><span className={pass?"pass":"fail"}>{pass?"✓ Design flow contained":"✕ Design flow exceeds road-reserve capacity"}</span>{r.wse>=num(kerbHeight)&&<span className="warn">! Flow above kerb</span>}</div><Metric name="Design flow" value={fmt(num(design))+" m³/s"}/><Metric name="Calculated flow at WSE" value={fmt(r.flow)+" m³/s"}/><Metric name="Total contained capacity" value={fmt(r.totalCapacity)+" m³/s"}/><Metric name="Calculated WSE" value={fmt(r.wse)+" m"}/><Metric name="Flow area" value={fmt(r.area)+" m²"}/><Metric name="Wetted perimeter" value={fmt(r.perimeter)+" m"}/><Metric name="Hydraulic radius" value={fmt(r.radius)+" m"}/><Metric name="Velocity" value={fmt(r.velocity)+" m/s"}/><Metric name="Top width" value={fmt(r.topWidth)+" m"}/><Metric name="Hazard (v·d)" value={fmt(r.vd)+" m²/s"}/><RoadDiagram points={r.points} width={r.width} wse={r.wse} roadFall={num(roadFall)}/><button className="download-btn" onClick={download}>↓ Export CSV</button><p className="engine-note">The calculated WSE solves Manning’s equation for the entered flow. Total contained capacity is calculated at the lower road-reserve boundary level. Confirm survey levels, kerb detail, roughness and authority criteria before design use.</p></>}</aside></div>
   </div>
 }
 function RoadDiagram({points,width,wse,roadFall}:{points:Point[];width:number;wse:number;roadFall:number}){
@@ -58,7 +68,7 @@ function RoadDiagram({points,width,wse,roadFall}:{points:Point[];width:number;ws
   return <div className="cross-section overland-diagram"><h3>ROAD CROSS SECTION — INPUT MEASUREMENTS</h3><svg viewBox="0 0 400 300" role="img" aria-label="Road cross-section labelled with live LHS and RHS input measurements">
     <defs><marker id="dim-arrow" markerWidth="7" markerHeight="7" refX="3.5" refY="3.5" orient="auto-start-reverse"><path d="M0,0 L7,3.5 L0,7 Z" fill="#365b91"/></marker></defs>
     {dim(0,width,26,"Road reserve width: "+fmt(width,2)+" m")}
-    {dim(points[4].x,points[6].x,58,"Road pavement width: "+fmt(points[6].x-points[4].x,2)+" m")}
+    {dim(points[3].x,points[7].x,58,"Road pavement width: "+fmt(points[7].x-points[3].x,2)+" m")}
     {dim(points[1].x,points[2].x,88,"LHS path: "+fmt(points[2].x-points[1].x,2)+" m")}
     {dim(points[2].x,points[3].x,116,"LHS nature strip: "+fmt(points[3].x-points[2].x,2)+" m")}
     {dim(points[7].x,points[8].x,116,"RHS nature strip: "+fmt(points[8].x-points[7].x,2)+" m")}
