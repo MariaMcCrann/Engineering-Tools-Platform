@@ -193,7 +193,8 @@ export default function Home() {
           <button className={view === "rorb" ? "active-tool" : ""} onClick={() => setView("rorb")}>RORB Median Flow</button>
           <button className={view === "channel" ? "active-tool" : ""} onClick={() => setView("channel")}>Channel Flow</button>
           <button className={view === "storage" ? "active-tool" : ""} onClick={() => setView("storage")}>Stage Storage</button>
-          <button className={view === "overland" ? "active-tool" : ""} onClick={() => setView("overland")}>Overland Flow</button>\n          <button className={view === "proposal" ? "active-tool" : ""} onClick={() => setView("proposal")}>Proposal Tool</button>
+          <button className={view === "overland" ? "active-tool" : ""} onClick={() => setView("overland")}>Overland Flow</button>
+          <button className={view === "proposal" ? "active-tool" : ""} onClick={() => setView("proposal")}>Proposal Tool</button>
         </div>
         <div className="version">ENGINEERING TOOL<br/><strong>Version 1.0</strong></div>
       </aside>
@@ -214,7 +215,8 @@ export default function Home() {
                 </button>
                 <button className="tool-card available" onClick={() => setView("channel")}><span className="tool-icon">CF</span><span><strong>Channel Flow</strong><small>Trapezoidal channel flow calculations.</small></span><b>Open →</b></button>
                 <button className="tool-card available" onClick={() => setView("storage")}><span className="tool-icon">SS</span><span><strong>Stage Storage</strong><small>Stage-storage calculations and outputs.</small></span><b>Open →</b></button>
-                <button className="tool-card available" onClick={() => setView("overland")}><span className="tool-icon">OF</span><span><strong>Overland Flow</strong><small>Road cross-section capacity and Manning flow checks.</small></span><b>Open →</b></button>\n                <button className="tool-card available" onClick={() => setView("proposal")}><span className="tool-icon">PT</span><span><strong>Proposal Tool</strong><small>Prepare consistent consultancy proposals.</small></span><b>Open →</b></button>
+                <button className="tool-card available" onClick={() => setView("overland")}><span className="tool-icon">OF</span><span><strong>Overland Flow</strong><small>Road cross-section capacity and Manning flow checks.</small></span><b>Open →</b></button>
+                <button className="tool-card available" onClick={() => setView("proposal")}><span className="tool-icon">PT</span><span><strong>Proposal Tool</strong><small>Prepare consistent consultancy proposals.</small></span><b>Open →</b></button>
               </section>
             </div>
           </>
