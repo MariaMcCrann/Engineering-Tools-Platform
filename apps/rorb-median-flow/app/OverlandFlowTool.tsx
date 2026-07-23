@@ -12,7 +12,8 @@ function profile(reserve:number,pavement:number,roadFall:number,kerbHeight:numbe
   if(verge<0)throw new Error("Pavement and kerbs exceed the road reserve.");
   const lb=verge-left.natureWidth-left.pathWidth,rb=verge-right.natureWidth-right.pathWidth;
   if(lb<0||rb<0)throw new Error("Nature strip and path widths exceed the available verge.");
-  const roadHalf=(pavement-2*kerbWidth)/2;if(roadHalf<=0)throw new Error("Kerb widths leave no usable road pavement.");\n  const crown=roadFall*roadHalf;
+  const roadHalf=(pavement-2*kerbWidth)/2;if(roadHalf<=0)throw new Error("Kerb widths leave no usable road pavement.");
+  const crown=roadFall*roadHalf;
   const lNature=kerbHeight+left.natureWidth*left.natureFall,lPath=lNature+left.pathWidth*left.pathFall,lBoundary=lPath+lb*left.boundaryFall;
   const rNature=kerbHeight+right.natureWidth*right.natureFall,rPath=rNature+right.pathWidth*right.pathFall,rBoundary=rPath+rb*right.boundaryFall;
   let x=0;const points:Point[]=[];const add=(width:number,z:number)=>{points.push({x,z});x+=width};
