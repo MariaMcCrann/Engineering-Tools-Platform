@@ -187,7 +187,7 @@ export default function Home() {
   return (
     <main className="app-shell">
       <aside className="sidebar">
-        <div className="brand"><img className="personal-mark" src="/brand-mark.png" alt=""/><span>ENGINEERING<br/>TOOLS</span></div>
+        <div className="brand"><img className="personal-mark" src="/brand-mark.svg" alt=""/><span>ENGINEERING<br/>TOOLS</span></div>
         <div className="tool-nav">
           <button className={view === "tools" ? "nav-selected" : "back"} onClick={() => setView("tools")}>◀ &nbsp; All Tools</button>
           <button className={view === "rorb" ? "active-tool" : ""} onClick={() => setView("rorb")}>RORB Median Flow</button>
