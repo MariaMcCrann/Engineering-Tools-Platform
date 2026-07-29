@@ -52,8 +52,8 @@ function calculate(x: Inputs) {
   if (froude > 4.5 && unitFlow < 46.5 && h1 < 61) basinType = "USBR Basin Type II";
   else if (froude > 4.5 && velocity < 18 && velocity > 15 && unitFlow < 18.6) basinType = "USBR Basin Type III";
   else if (froude < 4.5) basinType = "USBR Basin Type IV";
-  const basinFactor = basinType.endsWith("II") ? 4.4 : basinType.endsWith("III") ? 2.8 : basinType.endsWith("IV") ? 6 : NaN;
-  const tailFactor = basinType.endsWith("II") ? 1.05 : basinType.endsWith("III") ? 1 : basinType.endsWith("IV") ? 1.1 : NaN;
+  const basinFactor = basinType === "USBR Basin Type II" ? 4.4 : basinType === "USBR Basin Type III" ? 2.8 : basinType === "USBR Basin Type IV" ? 6 : NaN;
+  const tailFactor = basinType === "USBR Basin Type II" ? 1.05 : basinType === "USBR Basin Type III" ? 1 : basinType === "USBR Basin Type IV" ? 1.1 : NaN;
   const basinLength = basinFactor * conjugateDepth;
   const requiredTailwater = tailFactor * conjugateDepth;
   const upstreamEnergy = conjugateDepth + x.apron + unitFlow ** 2 / (2 * g * conjugateDepth ** 2);
