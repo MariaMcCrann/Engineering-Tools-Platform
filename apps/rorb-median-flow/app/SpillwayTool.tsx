@@ -29,7 +29,7 @@ const defaults: Inputs = {
 };
 
 const g = 9.81;
-const n = (value: number, digits = 2) => Number.isFinite(value) ? value.toFixed(digits) : "â€”";
+const n = (value: number, digits = 2) => Number.isFinite(value) ? value.toFixed(digits) : "-";
 
 function calculate(x: Inputs) {
   const flow = x.coefficient * x.width * Math.pow(x.head, 1.5);
@@ -76,7 +76,15 @@ export function SpillwayTool() {
   const set = (key: keyof Inputs) => (value: number) => setInputs((old) => ({ ...old, [key]: value }));
   const geometryWarning = r.cosTheta > 1;
   const energyPass = Math.abs(r.energyDifference) <= 0.02;
-  const valid = inputs.head > 0 && inputs.width > 0 && inputs.coefficient > 0 && inputs.slope > 0 && inputs.runFactor > 0 && inputs.jhrl > inputs.tailwater;
+  const inputIssues = [
+    inputs.head <= 0 ? "Flow depth over crest must be greater than 0 m." : "",
+    inputs.width <= 0 ? "Spillway crest width must be greater than 0 m." : "",
+    inputs.coefficient <= 0 ? "Weir discharge coefficient must be greater than 0." : "",
+    inputs.slope <= 0 ? "Chute slope denominator must be greater than 0." : "",
+    inputs.runFactor <= 0 ? "Chute horizontal-run factor must be greater than 0." : "",
+    inputs.jhrl <= inputs.tailwater ? `Hydraulic jump RL (${n(inputs.jhrl, 2)} m) must be higher than tailwater elevation (${n(inputs.tailwater, 2)} m).` : "",
+  ].filter(Boolean);
+  const valid = inputIssues.length === 0;
   const exportCsv = () => {
     const rows = [
       ["Spillway calculation", inputs.project || "Untitled"],
@@ -120,7 +128,7 @@ export function SpillwayTool() {
             <Field label="Chute horizontal-run factor" value={inputs.runFactor} role="assumption" defaultValue={defaults.runFactor} onChange={set("runFactor")}/>
           </div>
         </section>
-        {geometryWarning && <div className="warning"><div>!</div><p><strong>Review the chute geometry.</strong><br/>The workbook method gives cos Î¸ = {n(r.cosTheta, 3)}, which is above the physical limit of 1. The result is reproduced for parity, but the slope and chute-length definition should be checked before design use.</p></div>}
+        {geometryWarning && <div className="warning"><div>!</div><p><strong>Review the chute geometry.</strong><br/>The workbook method gives cos theta = {n(r.cosTheta, 3)}, which is above the physical limit of 1. The result is reproduced for parity, but the slope and chute-length definition should be checked before design use.</p></div>}
         <section className="calc-card">
           <div className="calc-card-title"><b>3</b><h2>Stilling basin summary</h2></div>
           <div className="spillway-table"><table><tbody>
@@ -136,13 +144,14 @@ export function SpillwayTool() {
       <aside className="calc-results">
         <p>LIVE RESULTS</p>
         <div className="result-hero"><span>Design spillway flow</span><strong>{n(r.flow, 3)}</strong><small>m³/s</small></div>
-        <div className="check-row"><span className={valid ? "pass" : "fail"}>{valid ? "âœ“ Inputs valid" : "! Check inputs"}</span><span className={energyPass ? "pass" : "warn"}>{energyPass ? "âœ“ Energy match" : "! Energy mismatch"}</span><span className={geometryWarning ? "warn" : "pass"}>{geometryWarning ? "! Geometry review" : "âœ“ Geometry"}</span></div>
+        <div className="check-row"><span className={valid ? "pass" : "fail"}>{valid ? "OK Inputs valid" : `! ${inputIssues.length} input issue${inputIssues.length === 1 ? "" : "s"}`}</span><span className={energyPass ? "pass" : "warn"}>{energyPass ? "OK Energy match" : "! Energy mismatch"}</span><span className={geometryWarning ? "warn" : "pass"}>{geometryWarning ? "! Geometry review" : "OK Geometry"}</span></div>
+        {inputIssues.length > 0 && <div className="spillway-input-error"><strong>What needs fixing</strong><ul>{inputIssues.map((issue) => <li key={issue}>{issue}</li>)}</ul></div>}
         <h3 className="result-section-title">WEIR FLOW</h3>
         <div className="metric"><span>Design water level</span><strong>{n(r.designLevel, 3)} m</strong></div>
         <div className="metric"><span>Unit discharge</span><strong>{n(r.unitFlow, 3)} m²/s</strong></div>
         <h3 className="result-section-title">CHUTE</h3>
         <div className="metric"><span>Chute length</span><strong>{n(r.chuteLength, 2)} m</strong></div>
-        <div className="metric"><span>cos Î¸ (workbook)</span><strong>{n(r.cosTheta, 3)}</strong></div>
+        <div className="metric"><span>cos theta (workbook)</span><strong>{n(r.cosTheta, 3)}</strong></div>
         <div className="metric"><span>Maximum velocity</span><strong>{n(r.velocity, 3)} m/s</strong></div>
         <div className="metric"><span>Toe depth</span><strong>{n(r.toeDepth, 3)} m</strong></div>
         <div className="metric"><span>Froude number</span><strong>{n(r.froude, 2)}</strong></div>
@@ -150,7 +159,7 @@ export function SpillwayTool() {
         <div className="metric"><span>Upstream energy</span><strong>{n(r.upstreamEnergy, 3)} m</strong></div>
         <div className="metric"><span>Tailwater energy</span><strong>{n(r.downstreamEnergy, 3)} m</strong></div>
         <div className="metric"><span>Difference</span><strong>{n(r.energyDifference, 3)} m</strong></div>
-        <button className="download-btn" onClick={exportCsv}>â†“ Export calculation CSV</button>
+        <button className="download-btn" onClick={exportCsv}>Download Export calculation CSV</button>
         <div className="cross-section spillway-diagram"><h3>SPILLWAY PROFILE</h3><svg viewBox="0 0 320 150" role="img" aria-label="Simplified spillway and stilling basin profile"><path d="M20 45 H90 V60 L205 122 H292" fill="none" stroke="#59779b" strokeWidth="4"/><path d="M20 30 H90" stroke="#4d9bc5" strokeWidth="3"/><path d="M25 35 Q38 29 51 35 T77 35" fill="none" stroke="#4d9bc5" strokeWidth="1.5"/><path d="M205 112 Q220 104 235 112 T265 112" fill="none" stroke="#4d9bc5" strokeWidth="2"/><line x1="90" y1="30" x2="90" y2="60" stroke="#b77b20" strokeDasharray="3 3"/><text x="24" y="23">Design water level</text><text x="96" y="53">Crest</text><text x="137" y="84">Chute</text><text x="212" y="140">Stilling basin</text></svg></div>
       </aside>
     </div>
