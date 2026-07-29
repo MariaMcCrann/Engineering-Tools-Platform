@@ -155,7 +155,7 @@ export function SpillwayTool() {
       </div>
       <aside className="calc-results">
         <p>LIVE RESULTS</p>
-        <div className="result-hero"><span>Design spillway flow</span><strong>{n(r.flow, 3)}</strong><small>m³/s</small></div>
+        <div className="result-hero"><span>Design spillway flow (C x B x H^1.5)</span><strong>{n(r.flow, 5)}</strong><small>m³/s</small></div>
         <div className="check-row"><span className={valid ? "pass" : "fail"}>{valid ? "OK Inputs valid" : `! ${inputIssues.length} input issue${inputIssues.length === 1 ? "" : "s"}`}</span><span className={energyPass ? "pass" : "warn"}>{energyPass ? "OK Energy match" : "! Energy mismatch"}</span><span className={geometryWarning ? "warn" : "pass"}>{geometryWarning ? "! Geometry review" : "OK Geometry"}</span></div>
         {inputIssues.length > 0 && <div className="spillway-input-error"><strong>What needs fixing</strong><ul>{inputIssues.map((issue) => <li key={issue}>{issue}</li>)}</ul></div>}
         <h3 className="result-section-title">WEIR FLOW</h3>
