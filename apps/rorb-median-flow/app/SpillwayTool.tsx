@@ -72,7 +72,7 @@ function calculate(x: Inputs) {
   }
   const hydraulicJumpRl = x.tailwater + actualTailwaterDepth;
   const downstreamEnergy = actualTailwaterDepth + x.tailwater + unitFlow ** 2 / (2 * g * actualTailwaterDepth ** 2);
-  return { flow, designLevel, h1, unitFlow, chuteLength, cosTheta, velocity, toeDepth, froude, conjugateDepth, rollLength, basinType, basinLength, requiredTailwater, upstreamEnergy, actualTailwaterDepth, hydraulicJumpRl, downstreamEnergy, energyDifference: upstreamEnergy - downstreamEnergy };
+  return { flow, designLevel, h1, unitFlow, chuteLength, cosTheta, velocity, toeDepth, froude, conjugateDepth, rollLength, basinType, basinLength, requiredTailwater, upstreamEnergy, actualTailwaterDepth, hydraulicJumpRl, downstreamEnergy, energyDifference: upstreamEnergy - downstreamEnergy, jumpFeasible, maximumTailwaterElevation };
 }
 
 function Field({ label, unit, value, role, onChange }: { label: string; unit?: string; value: number; role: "project" | "assumption"; onChange: (v: number) => void }) {
@@ -94,6 +94,7 @@ export function SpillwayTool() {
     inputs.coefficient <= 0 ? "Weir discharge coefficient must be greater than 0." : "",
     inputs.slope <= 0 ? "Chute slope denominator must be greater than 0." : "",
     inputs.runFactor <= 0 ? "Chute horizontal-run factor must be greater than 0." : "",
+    !r.jumpFeasible ? `No hydraulic-jump solution: tailwater elevation (${n(inputs.tailwater, 3)} m) must be at or below ${n(r.maximumTailwaterElevation, 3)} m for the current flow and geometry.` : "",
   ].filter(Boolean);
   const valid = inputIssues.length === 0;
   const exportCsv = () => {
@@ -120,7 +121,7 @@ export function SpillwayTool() {
       <div>
         <section className="calc-card">
           <div className="calc-card-title"><b>1</b><h2>Project and spillway geometry</h2></div>
-          <label className="calc-field guided-field project spillway-project"><span>Project name<em className="field-role project">Modify</em></span><small className="default-value">Used in the exported filename</small><input value={inputs.project} onChange={(e) => setInputs((old) => ({ ...old, project: e.target.value }))} placeholder="e.g. XX Drainage"/></label>
+          <label className="calc-field guided-field project spillway-project"><span>Project name<em className="field-role project">Modify</em></span><input value={inputs.project} onChange={(e) => setInputs((old) => ({ ...old, project: e.target.value }))}/></label>
           <div className="calc-fields spillway-fields">
             <Field label="Flow depth over crest" unit="m" value={inputs.head} role="project" onChange={set("head")}/>
             <Field label="Spillway crest width" unit="m" value={inputs.width} role="project" onChange={set("width")}/>
@@ -138,6 +139,7 @@ export function SpillwayTool() {
             <Field label="Chute horizontal-run factor" value={inputs.runFactor} role="assumption" onChange={set("runFactor")}/>
           </div>
         </section>
+        {!r.jumpFeasible && <div className="warning spillway-jump-warning"><div>!</div><p><strong>No hydraulic-jump solution for these values.</strong><br/>Tailwater elevation is {n(inputs.tailwater, 3)} m. It must be at or below {n(r.maximumTailwaterElevation, 3)} m for the energy equation to have a real solution. Reduce the tailwater elevation or review the upstream geometry and flow.</p></div>}
         {geometryWarning && <div className="warning"><div>!</div><p><strong>Review the chute geometry.</strong><br/>The workbook method gives cos theta = {n(r.cosTheta, 3)}, which is above the physical limit of 1. The result is reproduced for parity, but the slope and chute-length definition should be checked before design use.</p></div>}
         <section className="calc-card">
           <div className="calc-card-title"><b>3</b><h2>Stilling basin summary</h2></div>
@@ -145,8 +147,8 @@ export function SpillwayTool() {
             <tr><th>Recommended basin</th><td>{r.basinType}</td></tr>
             <tr><th>Conjugate depth</th><td>{n(r.conjugateDepth, 3)} m</td></tr>
             <tr><th>Basin length</th><td>{n(r.basinLength, 2)} m</td></tr>
-            <tr><th>Calculated hydraulic jump RL</th><td>{n(r.hydraulicJumpRl, 3)} m</td></tr>
-            <tr><th>Calculated tailwater depth</th><td>{n(r.actualTailwaterDepth, 3)} m</td></tr>
+            <tr><th>Calculated hydraulic jump RL</th><td>{r.jumpFeasible ? `${n(r.hydraulicJumpRl, 3)} m` : "No solution"}</td></tr>
+            <tr><th>Calculated tailwater depth</th><td>{r.jumpFeasible ? `${n(r.actualTailwaterDepth, 3)} m` : "No solution"}</td></tr>
             <tr><th>Required tailwater depth</th><td>{n(r.requiredTailwater, 2)} m</td></tr>
             <tr><th>Hydraulic-jump roll length</th><td>{n(r.rollLength, 2)} m</td></tr>
           </tbody></table></div>
@@ -156,7 +158,7 @@ export function SpillwayTool() {
       <aside className="calc-results">
         <p>LIVE RESULTS</p>
         <div className="result-hero"><span>Design spillway flow</span><strong>{n(r.flow, 3)}</strong><small>m³/s</small></div>
-        <div className="check-row"><span className={valid ? "pass" : "fail"}>{valid ? "OK Inputs valid" : `! ${inputIssues.length} input issue${inputIssues.length === 1 ? "" : "s"}`}</span><span className={energyPass ? "pass" : "warn"}>{energyPass ? "OK Energy match" : "! Energy mismatch"}</span><span className={geometryWarning ? "warn" : "pass"}>{geometryWarning ? "! Geometry review" : "OK Geometry"}</span></div>
+        <div className="check-row"><span className={valid ? "pass" : "fail"}>{valid ? "OK Inputs valid" : `! ${inputIssues.length} input issue${inputIssues.length === 1 ? "" : "s"}`}</span><span className={r.jumpFeasible ? (energyPass ? "pass" : "warn") : "fail"}>{r.jumpFeasible ? (energyPass ? "OK Energy match" : "! Energy mismatch") : "! No jump solution"}</span><span className={geometryWarning ? "warn" : "pass"}>{geometryWarning ? "! Geometry review" : "OK Geometry"}</span></div>
         {inputIssues.length > 0 && <div className="spillway-input-error"><strong>What needs fixing</strong><ul>{inputIssues.map((issue) => <li key={issue}>{issue}</li>)}</ul></div>}
         <h3 className="result-section-title">WEIR FLOW</h3>
         <div className="metric"><span>Design water level</span><strong>{n(r.designLevel, 3)} m</strong></div>
@@ -168,8 +170,9 @@ export function SpillwayTool() {
         <div className="metric"><span>Toe depth</span><strong>{n(r.toeDepth, 3)} m</strong></div>
         <div className="metric"><span>Froude number</span><strong>{n(r.froude, 2)}</strong></div>
         <h3 className="result-section-title">HYDRAULIC JUMP</h3>
-        <div className="metric"><span>Calculated hydraulic jump RL</span><strong>{n(r.hydraulicJumpRl, 3)} m</strong></div>
-        <div className="metric"><span>Calculated tailwater depth</span><strong>{n(r.actualTailwaterDepth, 3)} m</strong></div>
+        <div className="metric"><span>Calculated hydraulic jump RL</span><strong>{r.jumpFeasible ? `${n(r.hydraulicJumpRl, 3)} m` : "No solution"}</strong></div>
+        <div className="metric"><span>Calculated tailwater depth</span><strong>{r.jumpFeasible ? `${n(r.actualTailwaterDepth, 3)} m` : "No solution"}</strong></div>
+        <div className="metric"><span>Maximum feasible tailwater elevation</span><strong>{n(r.maximumTailwaterElevation, 3)} m</strong></div>
         <h3 className="result-section-title">ENERGY CHECK</h3>
         <div className="metric"><span>Upstream energy</span><strong>{n(r.upstreamEnergy, 3)} m</strong></div>
         <div className="metric"><span>Tailwater energy</span><strong>{n(r.downstreamEnergy, 3)} m</strong></div>
