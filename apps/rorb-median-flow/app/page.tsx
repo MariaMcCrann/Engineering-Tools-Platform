@@ -3,6 +3,7 @@
 import { ChangeEvent, DragEvent, useMemo, useRef, useState } from "react";
 import { ChannelFlowTool, ProposalTool, StageStorageTool } from "./EngineeringTools";
 import { OverlandFlowTool } from "./OverlandFlowTool";
+import { RisingMainTool } from "./RisingMainTool";
 
 type Peak = { key: string; description: string };
 type Row = {
@@ -149,7 +150,7 @@ function calculate(parsed: Parsed, peakKey: string): Result[] {
 const fmt = (n: number | null) => n === null ? "—" : n.toFixed(4);
 
 export default function Home() {
-  const [view, setView] = useState<"tools" | "rorb" | "channel" | "storage" | "overland" | "proposal">("rorb");
+  const [view, setView] = useState<"tools" | "rorb" | "channel" | "storage" | "overland" | "rising" | "proposal">("rorb");
   const [parsed, setParsed] = useState<Parsed | null>(null);
   const [peakKey, setPeakKey] = useState("");
   const [project, setProject] = useState("");
@@ -194,6 +195,7 @@ export default function Home() {
           <button className={view === "channel" ? "active-tool" : ""} onClick={() => setView("channel")}>Channel Flow</button>
           <button className={view === "storage" ? "active-tool" : ""} onClick={() => setView("storage")}>Stage Storage</button>
           <button className={view === "overland" ? "active-tool" : ""} onClick={() => setView("overland")}>Overland Flow</button>
+          <button className={view === "rising" ? "active-tool" : ""} onClick={() => setView("rising")}>Rising Main</button>
           <button className={view === "proposal" ? "active-tool" : ""} onClick={() => setView("proposal")}>Proposal Tool</button>
         </div>
         <div className="version">ENGINEERING TOOL<br/><strong>Version 1.0</strong></div>
@@ -216,11 +218,12 @@ export default function Home() {
                 <button className="tool-card available" onClick={() => setView("channel")}><span className="tool-icon">CF</span><span><strong>Channel Flow</strong><small>Trapezoidal channel flow calculations.</small></span><b>Open →</b></button>
                 <button className="tool-card available" onClick={() => setView("storage")}><span className="tool-icon">SS</span><span><strong>Stage Storage</strong><small>Stage-storage calculations and outputs.</small></span><b>Open →</b></button>
                 <button className="tool-card available" onClick={() => setView("overland")}><span className="tool-icon">OF</span><span><strong>Overland Flow</strong><small>Road cross-section capacity and Manning flow checks.</small></span><b>Open →</b></button>
+                <button className="tool-card available" onClick={() => setView("rising")}><span className="tool-icon">RM</span><span><strong>Rising Main</strong><small>Pipe losses, surge pressure, thrust blocks and pump-sump cycling.</small></span><b>Open →</b></button>
                 <button className="tool-card available" onClick={() => setView("proposal")}><span className="tool-icon">PT</span><span><strong>Proposal Tool</strong><small>Prepare consistent consultancy proposals.</small></span><b>Open →</b></button>
               </section>
             </div>
           </>
-        ) : view === "channel" ? <><header className="hub-header"><span>Channel Flow</span></header><ChannelFlowTool/></> : view === "storage" ? <><header className="hub-header"><span>Stage Storage</span></header><StageStorageTool/></> : view === "overland" ? <><header className="hub-header"><span>Overland Flow</span></header><OverlandFlowTool/></> : view === "proposal" ? <><header className="hub-header"><span>Proposal Tool</span></header><ProposalTool/></> : <>
+        ) : view === "channel" ? <><header className="hub-header"><span>Channel Flow</span></header><ChannelFlowTool/></> : view === "storage" ? <><header className="hub-header"><span>Stage Storage</span></header><StageStorageTool/></> : view === "overland" ? <><header className="hub-header"><span>Overland Flow</span></header><OverlandFlowTool/></> : view === "rising" ? <><header className="hub-header"><span>Rising Main</span></header><RisingMainTool/></> : view === "proposal" ? <><header className="hub-header"><span>Proposal Tool</span></header><ProposalTool/></> : <>
         <header className="top-tabs"><button className="selected">New Analysis</button><button disabled>Projects</button><button disabled>Model QA</button></header>
         <div className="content">
           <div className="title-row"><div><p className="eyebrow">RORB RESULTS PROCESSOR</p><h1>Median Flow Analysis</h1><p className="subtitle">Upload a RORB batch output to identify the 1-up median flow and critical duration.</p></div><span className="condition-pill">Existing Conditions</span></div>
