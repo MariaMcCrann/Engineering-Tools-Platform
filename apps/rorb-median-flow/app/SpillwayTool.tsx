@@ -135,11 +135,11 @@ export function SpillwayTool() {
       </div>
       <aside className="calc-results">
         <p>LIVE RESULTS</p>
-        <div className="result-hero"><span>Design spillway flow</span><strong>{n(r.flow, 3)}</strong><small>mÂ³/s</small></div>
+        <div className="result-hero"><span>Design spillway flow</span><strong>{n(r.flow, 3)}</strong><small>m³/s</small></div>
         <div className="check-row"><span className={valid ? "pass" : "fail"}>{valid ? "âœ“ Inputs valid" : "! Check inputs"}</span><span className={energyPass ? "pass" : "warn"}>{energyPass ? "âœ“ Energy match" : "! Energy mismatch"}</span><span className={geometryWarning ? "warn" : "pass"}>{geometryWarning ? "! Geometry review" : "âœ“ Geometry"}</span></div>
         <h3 className="result-section-title">WEIR FLOW</h3>
         <div className="metric"><span>Design water level</span><strong>{n(r.designLevel, 3)} m</strong></div>
-        <div className="metric"><span>Unit discharge</span><strong>{n(r.unitFlow, 3)} mÂ²/s</strong></div>
+        <div className="metric"><span>Unit discharge</span><strong>{n(r.unitFlow, 3)} m²/s</strong></div>
         <h3 className="result-section-title">CHUTE</h3>
         <div className="metric"><span>Chute length</span><strong>{n(r.chuteLength, 2)} m</strong></div>
         <div className="metric"><span>cos Î¸ (workbook)</span><strong>{n(r.cosTheta, 3)}</strong></div>
