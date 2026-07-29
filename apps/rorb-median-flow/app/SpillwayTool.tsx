@@ -109,7 +109,7 @@ export function SpillwayTool() {
       <div>
         <section className="calc-card">
           <div className="calc-card-title"><b>1</b><h2>Project and spillway geometry</h2></div>
-          <label className="calc-field guided-field project spillway-project"><span>Project name<em className="field-role project">Modify</em></span><small className="default-value">Used in the exported filename</small><input value={inputs.project} onChange={(e) => setInputs((old) => ({ ...old, project: e.target.value }))} placeholder="e.g. Cowra-Linden Drainage"/></label>
+          <label className="calc-field guided-field project spillway-project"><span>Project name<em className="field-role project">Modify</em></span><small className="default-value">Used in the exported filename</small><input value={inputs.project} onChange={(e) => setInputs((old) => ({ ...old, project: e.target.value }))} placeholder="e.g. XX Drainage"/></label>
           <div className="calc-fields spillway-fields">
             <Field label="Flow depth over crest" unit="m" value={inputs.head} role="project" defaultValue={defaults.head} onChange={set("head")}/>
             <Field label="Spillway crest width" unit="m" value={inputs.width} role="project" defaultValue={defaults.width} onChange={set("width")}/>
