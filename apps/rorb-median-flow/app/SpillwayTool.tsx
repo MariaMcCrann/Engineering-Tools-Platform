@@ -58,8 +58,10 @@ function calculate(x: Inputs) {
   const availableEnergy = upstreamEnergy - x.tailwater;
   const criticalDepth = Math.cbrt(unitFlow ** 2 / g);
   const minimumEnergy = 1.5 * criticalDepth;
+  const maximumTailwaterElevation = upstreamEnergy - minimumEnergy;
+  const jumpFeasible = availableEnergy >= minimumEnergy;
   let actualTailwaterDepth = NaN;
-  if (availableEnergy >= minimumEnergy) {
+  if (jumpFeasible) {
     let low = criticalDepth;
     let high = Math.max(1, availableEnergy * 2);
     const residual = (depth: number) => depth + unitFlow ** 2 / (2 * g * depth ** 2) - availableEnergy;
