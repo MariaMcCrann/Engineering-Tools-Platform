@@ -7,8 +7,47 @@ const num = (v: string) => Number(v);
 const fmt = (v: number, d = 3) =>
   Number.isFinite(v) ? v.toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d }) : "—";
 
+type FieldGuide = { defaultValue: string; role: "project" | "assumption" };
+const FIELD_GUIDANCE: Record<string, FieldGuide> = {
+  "Rising main length": { defaultValue: "20 m", role: "project" },
+  "Static head": { defaultValue: "5 m", role: "project" },
+  "Pumping rate": { defaultValue: "30 L/s", role: "project" },
+  "Internal diameter": { defaultValue: "142.7 mm", role: "project" },
+  "Colebrook roughness, k": { defaultValue: "0.015 mm", role: "assumption" },
+  "Kinematic viscosity": { defaultValue: "1.01 × 10⁻⁶ m²/s", role: "assumption" },
+  "45° bends": { defaultValue: "2", role: "project" },
+  "90° bends": { defaultValue: "2", role: "project" },
+  "Gate valves": { defaultValue: "0", role: "project" },
+  "Reflux valves": { defaultValue: "0", role: "project" },
+  "Air valves": { defaultValue: "0", role: "project" },
+  "Water density": { defaultValue: "1,000 kg/m³", role: "assumption" },
+  "Water bulk modulus": { defaultValue: "2.05 GPa", role: "assumption" },
+  "Pipe wall thickness": { defaultValue: "3.2 mm", role: "project" },
+  "Pipe elastic modulus": { defaultValue: "165 MPa", role: "assumption" },
+  "Pipe pressure class": { defaultValue: "PN 6", role: "project" },
+  "Allowable soil bearing pressure": { defaultValue: "20 kN/m²", role: "project" },
+  "Sump diameter": { defaultValue: "2.1 m", role: "project" },
+  "Working depth": { defaultValue: "2.7 m", role: "project" },
+  "Sump inflow": { defaultValue: "61 L/s", role: "project" },
+  "Pump rate": { defaultValue: "30 L/s", role: "project" }
+};
+const ROUGHNESS_VALUES = [
+  ["Copper, copper alloys and stainless steel", "0.015"],
+  ["Smooth-bore plastic pipelines", "0.015"],
+  ["Fibre-reinforced concrete (FRC)", "0.15"],
+  ["Cast iron, ductile iron, galvanised or malleable steel", "0.6"],
+  ["Vitrified clay and precast concrete", "0.6"],
+  ["Corrugated aluminium and steel", "3.0"]
+] as const;
+
 function Field({ label, value, unit, hint, onChange }: { label: string; value: string; unit?: string; hint?: string; onChange: (v: string) => void }) {
-  return <label className="calc-field"><span>{label}</span>{hint && <small>{hint}</small>}<input type="number" min="0" step="any" value={value} onChange={e => onChange(e.target.value)} />{unit && <i>{unit}</i>}</label>;
+  const guide = FIELD_GUIDANCE[label];
+  return <label className={"calc-field guided-field " + (guide?.role ?? "")}>
+    <span>{label}{guide && <em className={"field-role " + guide.role}>{guide.role === "project" ? "Modify" : "Review assumption"}</em>}</span>
+    {guide && <small className="default-value">Workbook default: {guide.defaultValue}</small>}
+    {hint && <small>{hint}</small>}
+    <input type="number" min="0" step="any" value={value} onChange={e => onChange(e.target.value)} />{unit && <i>{unit}</i>}
+  </label>;
 }
 function Section({ number, title, children }: { number: number; title: string; children: React.ReactNode }) {
   return <section className="calc-card"><div className="calc-card-title"><b>{number}</b><h2>{title}</h2></div>{children}</section>;
@@ -88,6 +127,13 @@ export function RisingMainTool() {
     return { area, velocity, re, f, velocityHead, friction, bends, valves, pit, form, totalHead, waveSpeed, surgeRise, surgeHead, surgeTime, allowablePressure, surgePressure, safetyFactor, thrust45, thrust90, endThrust, block45, block90, blockEnd, sumpArea, sumpVolume, fillTime, emptyTime, cycleTime, starts };
   }, [length, staticHead, flow, diameter, roughness, viscosity, b45, b90, gate, reflux, air, density, bulk, wall, modulus, pn, bearing, sumpDiameter, sumpDepth, inflow, pumpRate]);
 
+  const resetDefaults = () => {
+    setLength("20"); setStaticHead("5"); setFlow("30"); setDiameter("142.7"); setRoughness("0.015"); setViscosity("0.00000101");
+    setB45("2"); setB90("2"); setGate("0"); setReflux("0"); setAir("0"); setDensity("1000"); setBulk("2050000000");
+    setWall("3.2"); setModulus("165000000"); setPn("6"); setBearing("20"); setSumpDiameter("2.1"); setSumpDepth("2.7");
+    setInflow("61"); setPumpRate("30");
+  };
+
   const exportCsv = () => {
     if (!r) return;
     const rows = [
@@ -110,6 +156,10 @@ export function RisingMainTool() {
     <p className="eyebrow">PRESSURISED PIPE HYDRAULICS</p>
     <h1>Rising Main</h1>
     <p className="subtitle">Hydraulic losses, surge pressure, thrust blocks and pump-sump cycling based on the supplied calculation workbook.</p>
+    <section className="input-guide">
+      <div><strong>What to enter</strong><span><b className="guide-dot modify"></b><b>Modify</b> fields are project-specific and should be checked for every calculation.</span><span><b className="guide-dot review"></b><b>Review assumption</b> fields start with workbook values but must suit the selected pipe and fluid.</span></div>
+      <button type="button" onClick={resetDefaults}>Reset all workbook defaults</button>
+    </section>
     <div className="calc-layout"><div>
       <Section number={1} title="Rising main geometry and duty"><div className="calc-fields">
         <Field label="Rising main length" value={length} unit="m" onChange={setLength}/><Field label="Static head" value={staticHead} unit="m" onChange={setStaticHead}/>
@@ -121,6 +171,11 @@ export function RisingMainTool() {
         <Field label="Gate valves" value={gate} unit="no." hint="K = 0.2 each" onChange={setGate}/><Field label="Reflux valves" value={reflux} unit="no." hint="K = 2.5 each" onChange={setReflux}/>
         <Field label="Air valves" value={air} unit="no." hint="K = 0 in source workbook" onChange={setAir}/>
       </div></Section>
+      <section className="roughness-reference">
+        <div className="reference-head"><div><p className="eyebrow">REFERENCE TABLE</p><h2>Recommended Colebrook–White roughness, k</h2><span>Values from the supplied workbook. Select a row to use it.</span></div><strong>mm</strong></div>
+        <div className="reference-table"><table><thead><tr><th>Pipe material</th><th>Typical k (mm)</th><th></th></tr></thead><tbody>{ROUGHNESS_VALUES.map(([material, k]) => <tr key={material}><td>{material}</td><td>{k}</td><td><button type="button" onClick={() => setRoughness(k)}>Use value</button></td></tr>)}</tbody></table></div>
+        <p className="engine-note">Confirm the adopted roughness against the pipe manufacturer, condition and applicable design guidance. “k” is the absolute roughness used in the Colebrook–White equation.</p>
+      </section>
       <Section number={3} title="Surge and pipe properties"><div className="calc-fields">
         <Field label="Water density" value={density} unit="kg/m³" onChange={setDensity}/><Field label="Water bulk modulus" value={bulk} unit="Pa" onChange={setBulk}/>
         <Field label="Pipe wall thickness" value={wall} unit="mm" onChange={setWall}/><Field label="Pipe elastic modulus" value={modulus} unit="Pa" onChange={setModulus}/>
