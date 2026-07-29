@@ -7,9 +7,11 @@ A private, unified collection of browser-based civil engineering calculation and
 - **RORB Median Flow** — processes RORB batch output files, calculates the 1-up median flow for each duration, and identifies the critical duration and temporal pattern.
 - **Channel Flow** — calculates trapezoidal channel capacity using Manning's equation and displays a cross-section.
 - **Stage Storage** — calculates basin stage, area and storage tables and displays a cross-section.
+- **Overland Flow** — checks road-reserve overland-flow capacity using Manning’s equation.
+- **Rising Main** — calculates pipeline losses, surge pressure, thrust blocks and pump-sump cycling.
 - **Proposal Tool** — sends RFQ documents to the established proposal-analysis and document-generation service.
 
-All four tools are available from the **All Tools** screen and the persistent left navigation.
+All six tools are available from the **All Tools** screen and the persistent left navigation.
 
 ## Railway deployment
 
