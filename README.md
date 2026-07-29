@@ -10,9 +10,10 @@ A private, unified collection of browser-based civil engineering calculation and
 - **Overland Flow** — checks road-reserve overland-flow capacity using Manning’s equation.
 - **Rising Main** — calculates pipeline losses, surge pressure, thrust blocks and pump-sump cycling.
 - **GSDM PMP** — calculates short-duration PMP depths and credible-limit rainfall inputs for RORB.
+- **Spillway** — calculates weir flow, chute hydraulics, hydraulic-jump properties and USBR stilling-basin dimensions.
 - **Proposal Tool** — sends RFQ documents to the established proposal-analysis and document-generation service.
 
-All seven tools are available from the **All Tools** screen and the persistent left navigation.
+All eight tools are available from the **All Tools** screen and the persistent left navigation.
 
 ## Railway deployment
 
