@@ -19,11 +19,11 @@ const defaults: Inputs = {
   project: "",
   head: 0.4,
   width: 2,
-  crest: 4.05,
+  crest: 4.0,
   apron: 0,
   slope: 4,
   jhrl: 0.88,
-  tailwater: 0,
+  tailwater: 0.5,
   coefficient: 1.708,
   runFactor: 3,
 };
