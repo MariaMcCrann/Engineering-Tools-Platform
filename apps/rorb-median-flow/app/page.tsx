@@ -198,7 +198,7 @@ export default function Home() {
           <button className={view === "overland" ? "active-tool" : ""} onClick={() => setView("overland")}>Overland Flow</button>
           <button className={view === "rising" ? "active-tool" : ""} onClick={() => setView("rising")}>Rising Main</button>
           <button className={view === "gsdm" ? "active-tool" : ""} onClick={() => setView("gsdm")}>GSDM PMP</button>
-          <button className={view === "proposal" ? "active-tool" : ""} onClick={() => setView("proposal")}>Proposal Tool</button>
+          <button className={"nav-disabled" + (view === "proposal" ? " active-tool" : "")} disabled title="Not ready for review">Proposal Tool</button>
         </div>
         <div className="version">ENGINEERING TOOL<br/><strong>Version 1.0</strong></div>
       </aside>
@@ -222,7 +222,7 @@ export default function Home() {
                 <button className="tool-card available" onClick={() => setView("overland")}><span className="tool-icon">OF</span><span><strong>Overland Flow</strong><small>Road cross-section capacity and Manning flow checks.</small></span><b>Open →</b></button>
                 <button className="tool-card available" onClick={() => setView("rising")}><span className="tool-icon">RM</span><span><strong>Rising Main</strong><small>Pipe losses, surge pressure, thrust blocks and pump-sump cycling.</small></span><b>Open →</b></button>
                 <button className="tool-card available" onClick={() => setView("gsdm")}><span className="tool-icon">GP</span><span><strong>GSDM PMP</strong><small>Short-duration PMP estimates and RORB rainfall inputs.</small></span><b>Open →</b></button>
-                <button className="tool-card available" onClick={() => setView("proposal")}><span className="tool-icon">PT</span><span><strong>Proposal Tool</strong><small>Prepare consistent consultancy proposals.</small></span><b>Open →</b></button>
+                <button className="tool-card unavailable" disabled aria-disabled="true" title="Not ready for review"><span className="tool-icon">PT</span><span><strong>Proposal Tool</strong><small>Prepare consistent consultancy proposals.</small></span><b>Not ready</b></button>
               </section>
             </div>
           </>
