@@ -16,6 +16,7 @@ import {
   HydraulicJump,
   inputAtSize,
   InletEquationForm,
+  runCulvertHydrograph,
   solveNaturalChannelDepth,
   solveRectangularChannelDepth,
   solveTrapezoidalChannelDepth,
@@ -242,6 +243,63 @@ function NaturalChannelTable({
   );
 }
 
+type DischargeMode = "constant" | "hydrograph";
+
+interface HydrographRowInput {
+  time: string;
+  discharge: string;
+}
+
+function runHydrograph(
+  input: CulvertInput,
+  rows: HydrographRowInput[],
+): { result: ReturnType<typeof runCulvertHydrograph> | null; error: string } {
+  try {
+    return {
+      result: runCulvertHydrograph(
+        input,
+        rows.map((row) => ({ time: numberValue(row.time), discharge: numberValue(row.discharge) })),
+      ),
+      error: "",
+    };
+  } catch (error) {
+    return { result: null, error: error instanceof Error ? error.message : "Hydrograph calculation failed." };
+  }
+}
+
+function HydrographTable({
+  rows, onChange,
+}: {
+  rows: HydrographRowInput[];
+  onChange: (rows: HydrographRowInput[]) => void;
+}) {
+  const updateRow = (index: number, field: keyof HydrographRowInput, value: string) => {
+    onChange(rows.map((row, i) => (i === index ? { ...row, [field]: value } : row)));
+  };
+  const addRow = () => onChange([...rows, { time: "", discharge: "" }]);
+  const removeRow = (index: number) => onChange(rows.filter((_, i) => i !== index));
+
+  return (
+    <div className="channel-points-table">
+      <table>
+        <thead><tr><th>Time (min)</th><th>Discharge (m³/s)</th><th /></tr></thead>
+        <tbody>
+          {rows.map((row, index) => (
+            <tr key={index}>
+              <td><input type="number" step="any" value={row.time} onChange={(e) => updateRow(index, "time", e.target.value)} /></td>
+              <td><input type="number" step="any" value={row.discharge} onChange={(e) => updateRow(index, "discharge", e.target.value)} /></td>
+              <td>
+                <button type="button" onClick={() => removeRow(index)} disabled={rows.length <= 1} aria-label="Remove row">×</button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <button type="button" className="add-point-btn" onClick={addRow}>+ Add row</button>
+    </div>
+  );
+}
+
 const REGIME_LABELS: Record<WaterSurfaceProfile["regime"], string> = {
   subcritical: "Subcritical (outlet-control side)",
   supercritical: "Supercritical (inlet-control side)",
@@ -353,6 +411,13 @@ export function CulvertTool() {
     { station: "5", elevation: "2" },
   ]);
 
+  const [dischargeMode, setDischargeMode] = useState<DischargeMode>("constant");
+  const [hydrographRows, setHydrographRows] = useState<HydrographRowInput[]>([
+    { time: "0", discharge: "0.5" },
+    { time: "30", discharge: "2" },
+    { time: "60", discharge: "1" },
+  ]);
+
   const selectedEntrance = entranceType === "custom" ? undefined : findEntranceOption(entranceType);
 
   const handleEntranceChange = (id: string) => {
@@ -401,12 +466,21 @@ export function CulvertTool() {
       k: numberValue(customK), m: numberValue(customM), c: numberValue(customC), y: numberValue(customY),
     },
   };
-  const autoSize = autoSizeEnabled
+  const hydrograph = dischargeMode === "hydrograph" ? runHydrograph(input, hydrographRows) : null;
+  const autoSize = autoSizeEnabled && dischargeMode === "constant"
     ? runAutoSize(input, autoSizeParameter, numberValue(targetHeadwaterLevel))
     : null;
-  const calculation = autoSize
-    ? { result: autoSize.result?.result ?? null, error: autoSize.error }
-    : runCulvertCalculation(input);
+  const peakRow = hydrograph?.result && hydrograph.result.peakIndex !== null
+    ? hydrograph.result.rows[hydrograph.result.peakIndex]
+    : null;
+  const calculation = hydrograph
+    ? {
+        result: peakRow?.result ?? null,
+        error: hydrograph.error || (hydrograph.result && !peakRow ? "No hydrograph row produced a valid result." : ""),
+      }
+    : autoSize
+      ? { result: autoSize.result?.result ?? null, error: autoSize.error }
+      : runCulvertCalculation(input);
 
   const effectiveInput = autoSize?.result
     ? inputAtSize(input, autoSize.result.parameter, autoSize.result.solvedSize)
@@ -439,6 +513,15 @@ export function CulvertTool() {
       ["Froude number", result.froudeNumber, "-"],
       ["Flow condition", result.flowCondition, "-"],
       ...result.warnings.map((warning) => ["Warning", warning, ""]),
+      ...(hydrograph?.result
+        ? [
+            ["", "", ""],
+            ["Hydrograph time (min)", "Discharge (m3/s)", "Governing headwater (m)"],
+            ...hydrograph.result.rows.map((row) => [
+              String(row.time), String(row.discharge), row.result ? String(row.result.governingHeadwaterDepth) : row.error,
+            ]),
+          ]
+        : []),
     ];
     const csv = rows.map((row) => row.map(String).join(",")).join("\n");
     const anchor = document.createElement("a");
@@ -544,8 +627,29 @@ export function CulvertTool() {
           </Section>
 
           <Section number={3} title="Hydraulic conditions">
+            <div className="shape-selector">
+              <button
+                type="button"
+                className={dischargeMode === "constant" ? "selected" : ""}
+                onClick={() => setDischargeMode("constant")}
+              >
+                Constant discharge
+              </button>
+              <button
+                type="button"
+                className={dischargeMode === "hydrograph" ? "selected" : ""}
+                onClick={() => setDischargeMode("hydrograph")}
+              >
+                Hydrograph
+              </button>
+            </div>
+            {dischargeMode === "hydrograph" && (
+              <HydrographTable rows={hydrographRows} onChange={setHydrographRows} />
+            )}
             <div className="calc-fields">
-              <Field label="Design discharge" value={discharge} unit="m³/s" onChange={setDischarge} />
+              {dischargeMode === "constant" && (
+                <Field label="Design discharge" value={discharge} unit="m³/s" onChange={setDischarge} />
+              )}
               <SelectField
                 label="Tailwater source"
                 value={tailwaterSource}
@@ -590,10 +694,14 @@ export function CulvertTool() {
           </Section>
 
           <Section number={4} title="Auto-size (design mode)">
+            {dischargeMode === "hydrograph" && (
+              <p className="answer-note">Auto-size is evaluated against the constant-discharge field and does not apply while a hydrograph is active.</p>
+            )}
             <label className="research-check">
               <input
                 type="checkbox"
                 checked={autoSizeEnabled}
+                disabled={dischargeMode === "hydrograph"}
                 onChange={(event) => setAutoSizeEnabled(event.target.checked)}
               />
               <span>
@@ -685,7 +793,7 @@ export function CulvertTool() {
         <aside className="calc-results">
           <p>LIVE RESULTS</p>
           <div className="result-hero">
-            <span>Governing headwater</span>
+            <span>{hydrograph ? "Peak governing headwater" : "Governing headwater"}</span>
             <strong>
               {result ? format(result.governingHeadwaterDepth) : "—"}
               <small>m</small>
@@ -698,6 +806,13 @@ export function CulvertTool() {
               <small className={autoSize.result.converged ? "pass" : "fail"}>
                 {autoSize.result.converged ? "✓ converged" : "✕ no solution in search range"}
               </small>
+            </div>
+          )}
+          {peakRow && (
+            <div className="auto-size-summary">
+              <span>Peak at time {format(peakRow.time, 0)} min</span>
+              <strong>{format(peakRow.discharge)} m³/s</strong>
+              <small className="pass">✓ governs among {hydrograph?.result?.rows.length} rows</small>
             </div>
           )}
           {calculation.error && <p className="proposal-error">⚠ {calculation.error}</p>}
@@ -740,6 +855,23 @@ export function CulvertTool() {
                 <div className="culvert-warnings">
                   <strong>Engineering review</strong>
                   <ul>{result.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>
+                </div>
+              )}
+              {hydrograph?.result && (
+                <div className="hydrograph-table">
+                  <table>
+                    <thead><tr><th>Time (min)</th><th>Q (m³/s)</th><th>Headwater (m)</th><th>Control</th></tr></thead>
+                    <tbody>
+                      {hydrograph.result.rows.map((row, index) => (
+                        <tr key={index} className={index === hydrograph.result?.peakIndex ? "peak" : ""}>
+                          <td>{format(row.time, 0)}</td>
+                          <td>{format(row.discharge, 2)}</td>
+                          <td>{row.result ? format(row.result.governingHeadwaterDepth) : "—"}</td>
+                          <td>{row.result ? row.result.governingControl : row.error || "error"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               )}
               <button className="download-btn" onClick={download}>↓ Export CSV</button>
