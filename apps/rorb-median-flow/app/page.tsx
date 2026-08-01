@@ -151,8 +151,42 @@ function calculate(parsed: Parsed, peakKey: string): Result[] {
 
 const fmt = (n: number | null) => n === null ? "—" : n.toFixed(4);
 
+type ViewKey = "tools" | "rorb" | "channel" | "storage" | "overland" | "rising" | "gsdm" | "spillway" | "proposal";
+
+type ToolEntry = { view: Exclude<ViewKey, "tools">; icon: string; label: string; desc: string; disabled?: boolean };
+
+const TOOL_CATEGORIES: { key: string; label: string; tools: ToolEntry[] }[] = [
+  {
+    key: "project-management",
+    label: "Project Management",
+    tools: [
+      { view: "proposal", icon: "PT", label: "Proposal Tool", desc: "Prepare consistent consultancy proposals.", disabled: true },
+    ],
+  },
+  { key: "structures", label: "Structures", tools: [] },
+  {
+    key: "hydrology",
+    label: "Hydrology",
+    tools: [
+      { view: "rorb", icon: "MF", label: "RORB Median Flow", desc: "Process temporal-pattern ensembles and identify critical flows." },
+      { view: "storage", icon: "SS", label: "Stage Storage", desc: "Stage-storage calculations and outputs." },
+      { view: "gsdm", icon: "GP", label: "GSDM PMP", desc: "Short-duration PMP estimates and RORB rainfall inputs." },
+    ],
+  },
+  {
+    key: "hydraulics",
+    label: "Hydraulics",
+    tools: [
+      { view: "channel", icon: "CF", label: "Channel Flow", desc: "Trapezoidal channel flow calculations." },
+      { view: "overland", icon: "OF", label: "Overland Flow", desc: "Road cross-section capacity and Manning flow checks." },
+      { view: "rising", icon: "RM", label: "Rising Main", desc: "Pipe losses, surge pressure, thrust blocks and pump-sump cycling." },
+      { view: "spillway", icon: "SP", label: "Spillway", desc: "Weir flow, chute hydraulics and stilling-basin checks." },
+    ],
+  },
+];
+
 export default function Home() {
-  const [view, setView] = useState<"tools" | "rorb" | "channel" | "storage" | "overland" | "rising" | "gsdm" | "spillway" | "proposal">("rorb");
+  const [view, setView] = useState<ViewKey>("rorb");
   const [parsed, setParsed] = useState<Parsed | null>(null);
   const [peakKey, setPeakKey] = useState("");
   const [project, setProject] = useState("");
@@ -193,14 +227,26 @@ export default function Home() {
         <div className="brand"><img className="personal-mark" src="/brand-mark.svg" alt=""/><span>ENGINEERING<br/>TOOLS</span></div>
         <div className="tool-nav">
           <button className={view === "tools" ? "nav-selected" : "back"} onClick={() => setView("tools")}>◀ &nbsp; All Tools</button>
-          <button className={view === "rorb" ? "active-tool" : ""} onClick={() => setView("rorb")}>RORB Median Flow</button>
-          <button className={view === "channel" ? "active-tool" : ""} onClick={() => setView("channel")}>Channel Flow</button>
-          <button className={view === "storage" ? "active-tool" : ""} onClick={() => setView("storage")}>Stage Storage</button>
-          <button className={view === "overland" ? "active-tool" : ""} onClick={() => setView("overland")}>Overland Flow</button>
-          <button className={view === "rising" ? "active-tool" : ""} onClick={() => setView("rising")}>Rising Main</button>
-          <button className={view === "gsdm" ? "active-tool" : ""} onClick={() => setView("gsdm")}>GSDM PMP</button>
-          <button className={view === "spillway" ? "active-tool" : ""} onClick={() => setView("spillway")}>Spillway</button>
-          <button className={"nav-disabled" + (view === "proposal" ? " active-tool" : "")} disabled title="Not ready for review">Proposal Tool</button>
+          {TOOL_CATEGORIES.map((cat) => (
+            <div className="nav-category" key={cat.key}>
+              <div className="nav-category-label">{cat.label}</div>
+              {cat.tools.length === 0 ? (
+                <div className="nav-category-empty">Coming soon</div>
+              ) : (
+                cat.tools.map((t) => (
+                  <button
+                    key={t.view}
+                    className={(view === t.view ? "active-tool" : "") + (t.disabled ? " nav-disabled" : "")}
+                    onClick={() => !t.disabled && setView(t.view)}
+                    disabled={t.disabled}
+                    title={t.disabled ? "Not ready for review" : undefined}
+                  >
+                    {t.label}
+                  </button>
+                ))
+              )}
+            </div>
+          ))}
         </div>
         <div className="version">ENGINEERING TOOL<br/><strong>Version 1.0</strong></div>
       </aside>
@@ -213,20 +259,31 @@ export default function Home() {
               <p className="eyebrow">PERSONAL ENGINEERING WORKSPACE</p>
               <h1>All Tools</h1>
               <p className="subtitle">Open a calculator or see what is being added to the platform.</p>
-              <section className="tool-grid">
-                <button className="tool-card available" onClick={() => setView("rorb")}>
-                  <span className="tool-icon">MF</span>
-                  <span><strong>RORB Median Flow</strong><small>Process temporal-pattern ensembles and identify critical flows.</small></span>
-                  <b>Open →</b>
-                </button>
-                <button className="tool-card available" onClick={() => setView("channel")}><span className="tool-icon">CF</span><span><strong>Channel Flow</strong><small>Trapezoidal channel flow calculations.</small></span><b>Open →</b></button>
-                <button className="tool-card available" onClick={() => setView("storage")}><span className="tool-icon">SS</span><span><strong>Stage Storage</strong><small>Stage-storage calculations and outputs.</small></span><b>Open →</b></button>
-                <button className="tool-card available" onClick={() => setView("overland")}><span className="tool-icon">OF</span><span><strong>Overland Flow</strong><small>Road cross-section capacity and Manning flow checks.</small></span><b>Open →</b></button>
-                <button className="tool-card available" onClick={() => setView("rising")}><span className="tool-icon">RM</span><span><strong>Rising Main</strong><small>Pipe losses, surge pressure, thrust blocks and pump-sump cycling.</small></span><b>Open →</b></button>
-                <button className="tool-card available" onClick={() => setView("gsdm")}><span className="tool-icon">GP</span><span><strong>GSDM PMP</strong><small>Short-duration PMP estimates and RORB rainfall inputs.</small></span><b>Open →</b></button>
-                <button className="tool-card available" onClick={() => setView("spillway")}><span className="tool-icon">SP</span><span><strong>Spillway</strong><small>Weir flow, chute hydraulics and stilling-basin checks.</small></span><b>Open →</b></button>
-                <button className="tool-card unavailable" disabled aria-disabled="true" title="Not ready for review"><span className="tool-icon">PT</span><span><strong>Proposal Tool</strong><small>Prepare consistent consultancy proposals.</small></span><b>Not ready</b></button>
-              </section>
+              {TOOL_CATEGORIES.map((cat) => (
+                <section className="tool-category-section" key={cat.key}>
+                  <h2 className="tool-category-title">{cat.label}</h2>
+                  {cat.tools.length === 0 ? (
+                    <div className="tool-category-empty">More tools coming soon.</div>
+                  ) : (
+                    <div className="tool-grid">
+                      {cat.tools.map((t) => (
+                        <button
+                          key={t.view}
+                          className={`tool-card ${t.disabled ? "unavailable" : "available"}`}
+                          onClick={() => !t.disabled && setView(t.view)}
+                          disabled={t.disabled}
+                          aria-disabled={t.disabled || undefined}
+                          title={t.disabled ? "Not ready for review" : undefined}
+                        >
+                          <span className="tool-icon">{t.icon}</span>
+                          <span><strong>{t.label}</strong><small>{t.desc}</small></span>
+                          <b>{t.disabled ? "Not ready" : "Open →"}</b>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </section>
+              ))}
             </div>
           </>
         ) : view === "channel" ? <><header className="hub-header"><span>Channel Flow</span></header><ChannelFlowTool/></> : view === "storage" ? <><header className="hub-header"><span>Stage Storage</span></header><StageStorageTool/></> : view === "overland" ? <><header className="hub-header"><span>Overland Flow</span></header><OverlandFlowTool/></> : view === "rising" ? <><header className="hub-header"><span>Rising Main</span></header><RisingMainTool/></> : view === "gsdm" ? <><header className="hub-header"><span>GSDM PMP</span></header><GsdmPmpTool/></> : view === "spillway" ? <><header className="hub-header"><span>Spillway</span></header><SpillwayTool/></> : view === "proposal" ? <><header className="hub-header"><span>Proposal Tool</span></header><ProposalTool/></> : <>
