@@ -19,8 +19,8 @@ All eight tools are available from the **All Tools** screen and the persistent l
 
 Create a Railway service from this repository and configure:
 
-1. **Root Directory:** `/apps/rorb-median-flow`
-2. **Config file path:** `/apps/rorb-median-flow/railway.json`
+1. **Root Directory:** `/apps/engineering-tools`
+2. **Config file path:** `/apps/engineering-tools/railway.json`
 3. **Environment variable:**
    `NEXT_PUBLIC_PROPOSAL_PROCESS_URL=https://rain-proposal-tool-production.up.railway.app/process`
 4. Generate a public Railway domain after the deployment becomes healthy.
@@ -32,7 +32,7 @@ The proposal analysis remains a separate backend service. The environment variab
 ## Local development
 
 ```bash
-cd apps/rorb-median-flow
+cd apps/engineering-tools
 npm install
 npm run dev
 ```
