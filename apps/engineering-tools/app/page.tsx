@@ -152,15 +152,22 @@ function calculate(parsed: Parsed, peakKey: string): Result[] {
 
 const fmt = (n: number | null) => n === null ? "—" : n.toFixed(4);
 
-type ViewKey = "tools" | "rorb" | "channel" | "storage" | "overland" | "rising" | "gsdm" | "spillway" | "culvert" | "proposal";
+type ViewKey = "tools" | "rorb" | "channel" | "storage" | "overland" | "rising" | "gsdm" | "spillway" | "culvert" | "proposal" | "site-intelligence";
 
-type ToolEntry = { view: Exclude<ViewKey, "tools">; icon: string; label: string; desc: string; disabled?: boolean; badge?: string };
+type ToolEntry = { view: Exclude<ViewKey, "tools">; icon: string; label: string; desc: string; disabled?: boolean; badge?: string; externalUrl?: string };
 
 const TOOL_CATEGORIES: { key: string; label: string; tools: ToolEntry[] }[] = [
   {
     key: "project-management",
     label: "Project Management",
     tools: [
+      {
+        view: "site-intelligence",
+        icon: "GIS",
+        label: "Project Site Intelligence",
+        desc: "Screen a Victorian site against planning, cadastral and waterway open data.",
+        externalUrl: "https://project-site-intelligence.maria-mccrann.chatgpt.site",
+      },
       { view: "proposal", icon: "PT", label: "Proposal Tool", desc: "Prepare consistent consultancy proposals.", disabled: true },
     ],
   },
@@ -222,6 +229,14 @@ export default function Home() {
     a.click(); URL.revokeObjectURL(a.href);
   };
   const maxFlow = Math.max(...results.map((r) => r.selected), 1);
+  const openTool = (tool: ToolEntry) => {
+    if (tool.disabled) return;
+    if (tool.externalUrl) {
+      window.open(tool.externalUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
+    setView(tool.view);
+  };
 
   return (
     <main className="app-shell">
@@ -239,7 +254,7 @@ export default function Home() {
                   <button
                     key={t.view}
                     className={(view === t.view ? "active-tool" : "") + (t.disabled ? " nav-disabled" : "")}
-                    onClick={() => !t.disabled && setView(t.view)}
+                    onClick={() => openTool(t)}
                     disabled={t.disabled}
                     title={t.disabled ? "Not ready for review" : undefined}
                   >
@@ -273,14 +288,14 @@ export default function Home() {
                         <button
                           key={t.view}
                           className={`tool-card ${t.disabled ? "unavailable" : "available"}`}
-                          onClick={() => !t.disabled && setView(t.view)}
+                          onClick={() => openTool(t)}
                           disabled={t.disabled}
                           aria-disabled={t.disabled || undefined}
                           title={t.disabled ? "Not ready for review" : undefined}
                         >
                           <span className="tool-icon">{t.icon}</span>
                           <span><strong>{t.label}</strong>{t.badge && <em className="tool-badge">{t.badge}</em>}<small>{t.desc}</small></span>
-                          <b>{t.disabled ? "Not ready" : "Open →"}</b>
+                          <b>{t.disabled ? "Not ready" : t.externalUrl ? "Open ↗" : "Open →"}</b>
                         </button>
                       ))}
                     </div>
