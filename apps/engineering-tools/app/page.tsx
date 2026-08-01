@@ -186,7 +186,7 @@ const TOOL_CATEGORIES: { key: string; label: string; tools: ToolEntry[] }[] = [
 ];
 
 export default function Home() {
-  const [view, setView] = useState<ViewKey>("rorb");
+  const [view, setView] = useState<ViewKey>("tools");
   const [parsed, setParsed] = useState<Parsed | null>(null);
   const [peakKey, setPeakKey] = useState("");
   const [project, setProject] = useState("");
