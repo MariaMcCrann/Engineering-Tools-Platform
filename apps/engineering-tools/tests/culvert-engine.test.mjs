@@ -6,6 +6,7 @@ import {
   calculateInletControl,
   calculateOutletControl,
   manningDischarge,
+  runCulvertHydrograph,
   sectionProperties,
   solveCriticalDepth,
   solveNaturalChannelDepth,
@@ -305,4 +306,38 @@ test("a discharge exceeding the natural channel's surveyed capacity is capped at
   };
   const depth = solveNaturalChannelDepth(1e6, channel);
   assert.ok(Math.abs(depth - 2) < 1e-9);
+});
+
+test("runCulvertHydrograph runs one calculation per row and finds the peak", () => {
+  const hydrograph = runCulvertHydrograph(circular, [
+    { time: 0, discharge: 0.5 },
+    { time: 30, discharge: 2 },
+    { time: 60, discharge: 1 },
+  ]);
+  assert.equal(hydrograph.rows.length, 3);
+  assert.ok(hydrograph.rows.every((row) => row.result !== null && row.error === ""));
+  assert.ok(hydrograph.peakIndex !== null);
+  const peak = hydrograph.rows[hydrograph.peakIndex].result;
+  for (const row of hydrograph.rows) {
+    assert.ok(row.result.governingHeadwaterDepth <= peak.governingHeadwaterDepth);
+  }
+  // Each row's result should match calculating that discharge directly.
+  const direct = calculateCulvert({ ...circular, discharge: 2 });
+  assert.equal(hydrograph.rows[1].result.governingHeadwaterDepth, direct.governingHeadwaterDepth);
+});
+
+test("runCulvertHydrograph rejects an empty hydrograph", () => {
+  assert.throws(() => runCulvertHydrograph(circular, []), /at least one row/);
+});
+
+test("runCulvertHydrograph marks an invalid row's error without failing the whole batch", () => {
+  const hydrograph = runCulvertHydrograph(circular, [
+    { time: 0, discharge: 2 },
+    { time: 30, discharge: -1 },
+  ]);
+  assert.equal(hydrograph.rows[0].error, "");
+  assert.ok(hydrograph.rows[0].result !== null);
+  assert.ok(hydrograph.rows[1].error.length > 0);
+  assert.equal(hydrograph.rows[1].result, null);
+  assert.equal(hydrograph.peakIndex, 0);
 });

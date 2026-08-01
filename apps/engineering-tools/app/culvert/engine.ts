@@ -957,3 +957,64 @@ export function solveNaturalChannelDepth(discharge: number, channel: NaturalChan
   return solvedElevation - thalweg;
 }
 
+// ---------------------------------------------------------------------------
+// Hydrograph batch processing, ported from modanalisis.bas analisishidrograma.
+// The legacy app doesn't do anything hydraulically different for a
+// hydrograph — it re-runs the same single-discharge analysis once per row
+// and stores each row's results for later stepping through the results
+// screen. There is no new physics here, just running calculateCulvert once
+// per {time, discharge} row and identifying the peak.
+// ---------------------------------------------------------------------------
+
+export interface HydrographRow {
+  time: number;
+  discharge: number;
+}
+
+export interface HydrographRowResult {
+  time: number;
+  discharge: number;
+  result: CulvertResult | null;
+  error: string;
+}
+
+export interface CulvertHydrographResult {
+  rows: HydrographRowResult[];
+  peakIndex: number | null;
+}
+
+export function runCulvertHydrograph(baseInput: CulvertInput, rows: HydrographRow[]): CulvertHydrographResult {
+  if (rows.length === 0) {
+    throw new Error("The hydrograph needs at least one row.");
+  }
+
+  const results: HydrographRowResult[] = rows.map((row) => {
+    try {
+      return {
+        time: row.time,
+        discharge: row.discharge,
+        result: calculateCulvert({ ...baseInput, discharge: row.discharge }),
+        error: "",
+      };
+    } catch (error) {
+      return {
+        time: row.time,
+        discharge: row.discharge,
+        result: null,
+        error: error instanceof Error ? error.message : "Calculation failed.",
+      };
+    }
+  });
+
+  let peakIndex: number | null = null;
+  results.forEach((row, index) => {
+    if (!row.result) return;
+    const currentPeak = peakIndex !== null ? results[peakIndex].result : null;
+    if (!currentPeak || row.result.governingHeadwaterDepth > currentPeak.governingHeadwaterDepth) {
+      peakIndex = index;
+    }
+  });
+
+  return { rows: results, peakIndex };
+}
+
