@@ -1,10 +1,15 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import {
   calculateCulvert,
   CulvertInput,
   CulvertShape,
+  EntranceCategory,
+  ENTRANCE_CATEGORY_LABELS,
+  ENTRANCE_OPTIONS,
+  findEntranceOption,
+  InletEquationForm,
 } from "./culvert/engine";
 
 const numberValue = (value: string) => Number(value);
@@ -41,6 +46,27 @@ function Field({
   );
 }
 
+function SelectField({
+  label,
+  value,
+  onChange,
+  children,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="calc-field">
+      <span>{label}</span>
+      <select value={value} onChange={(event) => onChange(event.target.value)}>
+        {children}
+      </select>
+    </label>
+  );
+}
+
 function Section({
   number,
   title,
@@ -70,6 +96,23 @@ function Metric({ name, value }: { name: string; value: string }) {
   );
 }
 
+const CATEGORIES_BY_SHAPE: Record<CulvertShape, EntranceCategory[]> = {
+  rectangular: ["box"],
+  circular: ["concretePipe", "metalPipe"],
+};
+
+function entranceOptionsForShape(forShape: CulvertShape) {
+  return ENTRANCE_OPTIONS.filter((option) => CATEGORIES_BY_SHAPE[forShape].includes(option.category));
+}
+
+function runCulvertCalculation(input: CulvertInput): { result: ReturnType<typeof calculateCulvert> | null; error: string } {
+  try {
+    return { result: calculateCulvert(input), error: "" };
+  } catch (error) {
+    return { result: null, error: error instanceof Error ? error.message : "Calculation failed." };
+  }
+}
+
 export function CulvertTool() {
   const [shape, setShape] = useState<CulvertShape>("circular");
   const [diameter, setDiameter] = useState("1.2");
@@ -85,58 +128,66 @@ export function CulvertTool() {
   const [outletLoss, setOutletLoss] = useState("1");
   const [invertLevel, setInvertLevel] = useState("0");
 
-  const calculation = useMemo(() => {
-    const input: CulvertInput = {
-      shape,
-      diameter: numberValue(diameter),
-      width: numberValue(width),
-      height: numberValue(height),
-      barrels: numberValue(barrels),
-      length: numberValue(length),
-      slope: numberValue(slope),
-      roughness: numberValue(roughness),
-      discharge: numberValue(discharge),
-      tailwaterDepth: numberValue(tailwaterDepth),
-      entranceLossCoefficient: numberValue(entranceLoss),
-      outletLossCoefficient: numberValue(outletLoss),
-      inletInvertLevel: numberValue(invertLevel),
-    };
+  const [entranceType, setEntranceType] = useState(() => entranceOptionsForShape(shape)[0]?.id ?? "custom");
+  const [inletEquationForm, setInletEquationForm] = useState<InletEquationForm>("empirical");
+  const [customK, setCustomK] = useState("0.02");
+  const [customM, setCustomM] = useState("1.5");
+  const [customC, setCustomC] = useState("0.04");
+  const [customY, setCustomY] = useState("0.75");
 
-    try {
-      return { result: calculateCulvert(input), error: "" };
-    } catch (error) {
-      return {
-        result: null,
-        error: error instanceof Error ? error.message : "Calculation failed.",
-      };
+  const selectedEntrance = entranceType === "custom" ? undefined : findEntranceOption(entranceType);
+
+  const handleEntranceChange = (id: string) => {
+    setEntranceType(id);
+    const option = findEntranceOption(id);
+    if (option) setEntranceLoss(String(option.ke));
+  };
+
+  const handleShapeChange = (nextShape: CulvertShape) => {
+    setShape(nextShape);
+    const nextOptions = entranceOptionsForShape(nextShape);
+    if (!nextOptions.some((option) => option.id === entranceType)) {
+      setEntranceType(nextOptions[0]?.id ?? "custom");
     }
-  }, [
+  };
+
+  const input: CulvertInput = {
     shape,
-    diameter,
-    width,
-    height,
-    barrels,
-    length,
-    slope,
-    roughness,
-    discharge,
-    tailwaterDepth,
-    entranceLoss,
-    outletLoss,
-    invertLevel,
-  ]);
+    diameter: numberValue(diameter),
+    width: numberValue(width),
+    height: numberValue(height),
+    barrels: numberValue(barrels),
+    length: numberValue(length),
+    slope: numberValue(slope),
+    roughness: numberValue(roughness),
+    discharge: numberValue(discharge),
+    tailwaterDepth: numberValue(tailwaterDepth),
+    entranceLossCoefficient: numberValue(entranceLoss),
+    outletLossCoefficient: numberValue(outletLoss),
+    inletInvertLevel: numberValue(invertLevel),
+    entranceType,
+    inletEquationForm,
+    customEntranceCoefficients: {
+      k: numberValue(customK), m: numberValue(customM), c: numberValue(customC), y: numberValue(customY),
+    },
+  };
+  const calculation = runCulvertCalculation(input);
 
   const download = () => {
     if (!calculation.result) return;
     const result = calculation.result;
     const rows = [
       ["Culvert calculation", "Value", "Unit"],
+      ["Governing headwater", result.governingHeadwaterDepth, "m"],
+      ["Governing control", result.governingControl === "inlet" ? "Inlet control" : "Outlet control", "-"],
+      ["Inlet-control headwater", result.inletControl.headwaterDepth, "m"],
+      ["Inlet-control flow condition", result.inletControl.condition, "-"],
+      ["Outlet-control headwater", result.outletControl.headwaterDepth, "m"],
       ["Full-flow capacity", result.fullFlowCapacity, "m3/s"],
       ["Capacity utilisation", result.capacityUtilisation * 100, "%"],
       ["Normal depth", result.normalDepth, "m"],
       ["Critical depth", result.criticalDepth, "m"],
-      ["Outlet-control headwater depth", result.outletControlHeadwaterDepth, "m"],
-      ["Headwater level", result.headwaterLevel, "m AHD / datum"],
+      ["Governing headwater level", result.governingHeadwaterLevel, "m AHD / datum"],
       ["Velocity", result.upstreamVelocity, "m/s"],
       ["Froude number", result.froudeNumber, "-"],
       ["Flow condition", result.flowCondition, "-"],
@@ -157,8 +208,8 @@ export function CulvertTool() {
       <p className="eyebrow">HYDRAULIC CALCULATOR</p>
       <h1>Culvert</h1>
       <p className="subtitle">
-        Manning capacity, normal and critical depth, outlet-control headwater,
-        velocity and hydraulic checks.
+        Manning capacity, normal and critical depth, FHWA HDS-5 inlet control,
+        outlet-control headwater, and the governing design headwater.
       </p>
 
       <div className="calc-layout">
@@ -168,14 +219,14 @@ export function CulvertTool() {
               <button
                 type="button"
                 className={shape === "circular" ? "selected" : ""}
-                onClick={() => setShape("circular")}
+                onClick={() => handleShapeChange("circular")}
               >
                 Circular
               </button>
               <button
                 type="button"
                 className={shape === "rectangular" ? "selected" : ""}
-                onClick={() => setShape("rectangular")}
+                onClick={() => handleShapeChange("rectangular")}
               >
                 Rectangular
               </button>
@@ -196,7 +247,56 @@ export function CulvertTool() {
             </div>
           </Section>
 
-          <Section number={2} title="Hydraulic conditions">
+          <Section number={2} title="Entrance configuration">
+            <div className="calc-fields">
+              <SelectField label="Entrance type" value={entranceType} onChange={handleEntranceChange}>
+                {CATEGORIES_BY_SHAPE[shape].map((category) => (
+                  <optgroup label={ENTRANCE_CATEGORY_LABELS[category]} key={category}>
+                    {ENTRANCE_OPTIONS.filter((option) => option.category === category).map((option) => (
+                      <option value={option.id} key={option.id}>{option.label}</option>
+                    ))}
+                  </optgroup>
+                ))}
+                <optgroup label="Custom">
+                  <option value="custom">Personalized (custom K, M, c, Y)</option>
+                </optgroup>
+              </SelectField>
+              <div className="shape-selector">
+                <button
+                  type="button"
+                  className={inletEquationForm === "empirical" ? "selected" : ""}
+                  onClick={() => setInletEquationForm("empirical")}
+                >
+                  Empirical (Form 2)
+                </button>
+                <button
+                  type="button"
+                  className={inletEquationForm === "mathematical" ? "selected" : ""}
+                  onClick={() => setInletEquationForm("mathematical")}
+                >
+                  Mathematical (Form 1)
+                </button>
+              </div>
+            </div>
+            {selectedEntrance ? (
+              <div className="entrance-coefficients">
+                <Metric name="K" value={format(selectedEntrance.k, 4)} />
+                <Metric name="M" value={format(selectedEntrance.m, 3)} />
+                <Metric name="c" value={format(selectedEntrance.c, 4)} />
+                <Metric name="Y" value={format(selectedEntrance.y, 3)} />
+                <Metric name="Entrance loss ke" value={format(selectedEntrance.ke, 2)} />
+              </div>
+            ) : (
+              <div className="calc-fields">
+                <Field label="Coefficient K" value={customK} onChange={setCustomK} />
+                <Field label="Coefficient M" value={customM} onChange={setCustomM} />
+                <Field label="Coefficient c" value={customC} onChange={setCustomC} />
+                <Field label="Coefficient Y" value={customY} onChange={setCustomY} />
+              </div>
+            )}
+          </Section>
+
+          <Section number={3} title="Hydraulic conditions">
             <div className="calc-fields">
               <Field label="Design discharge" value={discharge} unit="m³/s" onChange={setDischarge} />
               <Field label="Tailwater depth" value={tailwaterDepth} unit="m" onChange={setTailwaterDepth} />
@@ -206,12 +306,14 @@ export function CulvertTool() {
             </div>
           </Section>
 
-          <Section number={3} title="Calculation basis">
+          <Section number={4} title="Calculation basis">
             <p className="answer-note">
-              Preliminary hydraulic assessment using Manning flow and an
-              outlet-control energy-loss approximation. Confirm inlet-control
-              coefficients, blockage, afflux and governing authority criteria
-              before design issue.
+              Governing headwater is the greater of FHWA HDS-5 inlet control and
+              an outlet-control energy-balance approximation. Confirm blockage,
+              afflux and governing authority criteria before design issue. This
+              is not yet a certified replacement for the full legacy Hidroalcun
+              application (water-surface profiles, hydraulic jump and
+              auto-sizing remain deferred).
             </p>
           </Section>
         </div>
@@ -219,9 +321,9 @@ export function CulvertTool() {
         <aside className="calc-results">
           <p>LIVE RESULTS</p>
           <div className="result-hero">
-            <span>Outlet-control headwater</span>
+            <span>Governing headwater</span>
             <strong>
-              {result ? format(result.outletControlHeadwaterDepth) : "—"}
+              {result ? format(result.governingHeadwaterDepth) : "—"}
               <small>m</small>
             </strong>
           </div>
@@ -229,6 +331,9 @@ export function CulvertTool() {
           {result && (
             <>
               <div className="check-row">
+                <span className={result.governingControl === "inlet" ? "warn" : "pass"}>
+                  {result.governingControl === "inlet" ? "Inlet control governs" : "Outlet control governs"}
+                </span>
                 <span className={result.capacityUtilisation <= 1 ? "pass" : "fail"}>
                   {result.capacityUtilisation <= 1 ? "✓ Capacity available" : "✕ Capacity exceeded"}
                 </span>
@@ -236,11 +341,25 @@ export function CulvertTool() {
                   {result.upstreamVelocity <= 3 ? "✓ Velocity ≤ 3 m/s" : "! High velocity"}
                 </span>
               </div>
+
+              <div className="control-comparison">
+                <div className={result.governingControl === "inlet" ? "governs" : ""}>
+                  <span>Inlet control</span>
+                  <strong>{format(result.inletControl.headwaterDepth)} m</strong>
+                  <small>{result.inletControl.condition}</small>
+                </div>
+                <div className={result.governingControl === "outlet" ? "governs" : ""}>
+                  <span>Outlet control</span>
+                  <strong>{format(result.outletControl.headwaterDepth)} m</strong>
+                  <small>tailwater basis {format(result.outletControl.controllingTailwaterDepth, 2)} m</small>
+                </div>
+              </div>
+
               <Metric name="Full-flow capacity" value={`${format(result.fullFlowCapacity)} m³/s`} />
               <Metric name="Capacity utilisation" value={`${format(result.capacityUtilisation * 100, 1)}%`} />
               <Metric name="Normal depth" value={`${format(result.normalDepth)} m`} />
               <Metric name="Critical depth" value={`${format(result.criticalDepth)} m`} />
-              <Metric name="Headwater level" value={`${format(result.headwaterLevel)} m`} />
+              <Metric name="Governing headwater level" value={`${format(result.governingHeadwaterLevel)} m`} />
               <Metric name="Velocity" value={`${format(result.upstreamVelocity)} m/s`} />
               <Metric name="Froude number" value={format(result.froudeNumber)} />
               <Metric name="Flow condition" value={result.flowCondition.replaceAll("-", " ")} />
