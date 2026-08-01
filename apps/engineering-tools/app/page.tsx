@@ -166,7 +166,7 @@ const TOOL_CATEGORIES: { key: string; label: string; tools: ToolEntry[] }[] = [
         icon: "GIS",
         label: "Project Site Intelligence",
         desc: "Screen a Victorian site against planning, cadastral and waterway open data.",
-        externalUrl: "https://project-site-intelligence.maria-mccrann.chatgpt.site",
+        externalUrl: "https://siteintelligence.floodriskadvisory.com.au",
       },
       { view: "proposal", icon: "PT", label: "Proposal Tool", desc: "Prepare consistent consultancy proposals.", disabled: true },
     ],
