@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import {
+  autoSizeCulvert,
+  AutoSizeParameter,
   calculateCulvert,
   CulvertInput,
   CulvertShape,
@@ -113,6 +115,34 @@ function runCulvertCalculation(input: CulvertInput): { result: ReturnType<typeof
   }
 }
 
+const AUTO_SIZE_PARAMETERS_BY_SHAPE: Record<CulvertShape, { value: AutoSizeParameter; label: string }[]> = {
+  circular: [{ value: "diameter", label: "Diameter" }],
+  rectangular: [
+    { value: "height", label: "Height (width held fixed)" },
+    { value: "width", label: "Width (height held fixed)" },
+    { value: "side", label: "Square side (width = height)" },
+  ],
+};
+
+const AUTO_SIZE_PARAMETER_NAMES: Record<AutoSizeParameter, string> = {
+  diameter: "Diameter",
+  height: "Height",
+  width: "Width",
+  side: "Side",
+};
+
+function runAutoSize(
+  input: CulvertInput,
+  parameter: AutoSizeParameter,
+  targetHeadwaterLevel: number,
+): { result: ReturnType<typeof autoSizeCulvert> | null; error: string } {
+  try {
+    return { result: autoSizeCulvert(input, parameter, targetHeadwaterLevel), error: "" };
+  } catch (error) {
+    return { result: null, error: error instanceof Error ? error.message : "Auto-size calculation failed." };
+  }
+}
+
 export function CulvertTool() {
   const [shape, setShape] = useState<CulvertShape>("circular");
   const [diameter, setDiameter] = useState("1.2");
@@ -135,6 +165,10 @@ export function CulvertTool() {
   const [customC, setCustomC] = useState("0.04");
   const [customY, setCustomY] = useState("0.75");
 
+  const [autoSizeEnabled, setAutoSizeEnabled] = useState(false);
+  const [autoSizeParameter, setAutoSizeParameter] = useState<AutoSizeParameter>("diameter");
+  const [targetHeadwaterLevel, setTargetHeadwaterLevel] = useState("1.5");
+
   const selectedEntrance = entranceType === "custom" ? undefined : findEntranceOption(entranceType);
 
   const handleEntranceChange = (id: string) => {
@@ -148,6 +182,10 @@ export function CulvertTool() {
     const nextOptions = entranceOptionsForShape(nextShape);
     if (!nextOptions.some((option) => option.id === entranceType)) {
       setEntranceType(nextOptions[0]?.id ?? "custom");
+    }
+    const nextAutoSizeOptions = AUTO_SIZE_PARAMETERS_BY_SHAPE[nextShape];
+    if (!nextAutoSizeOptions.some((option) => option.value === autoSizeParameter)) {
+      setAutoSizeParameter(nextAutoSizeOptions[0].value);
     }
   };
 
@@ -171,13 +209,25 @@ export function CulvertTool() {
       k: numberValue(customK), m: numberValue(customM), c: numberValue(customC), y: numberValue(customY),
     },
   };
-  const calculation = runCulvertCalculation(input);
+  const autoSize = autoSizeEnabled
+    ? runAutoSize(input, autoSizeParameter, numberValue(targetHeadwaterLevel))
+    : null;
+  const calculation = autoSize
+    ? { result: autoSize.result?.result ?? null, error: autoSize.error }
+    : runCulvertCalculation(input);
 
   const download = () => {
     if (!calculation.result) return;
     const result = calculation.result;
     const rows = [
       ["Culvert calculation", "Value", "Unit"],
+      ...(autoSize?.result
+        ? [
+            ["Auto-sized parameter", autoSize.result.parameter, "-"],
+            ["Auto-sized value", autoSize.result.solvedSize, "m"],
+            ["Auto-size converged", autoSize.result.converged ? "yes" : "no", "-"],
+          ]
+        : []),
       ["Governing headwater", result.governingHeadwaterDepth, "m"],
       ["Governing control", result.governingControl === "inlet" ? "Inlet control" : "Outlet control", "-"],
       ["Inlet-control headwater", result.inletControl.headwaterDepth, "m"],
@@ -306,14 +356,51 @@ export function CulvertTool() {
             </div>
           </Section>
 
-          <Section number={4} title="Calculation basis">
+          <Section number={4} title="Auto-size (design mode)">
+            <label className="research-check">
+              <input
+                type="checkbox"
+                checked={autoSizeEnabled}
+                onChange={(event) => setAutoSizeEnabled(event.target.checked)}
+              />
+              <span>
+                <strong>Solve for a culvert size instead of entering it</strong>
+                <small>Finds the smallest size whose governing headwater meets the target level below, following the legacy design-mode bisection.</small>
+              </span>
+            </label>
+            {autoSizeEnabled && (
+              <div className="calc-fields">
+                <SelectField
+                  label="Solve for"
+                  value={autoSizeParameter}
+                  onChange={(value) => setAutoSizeParameter(value as AutoSizeParameter)}
+                >
+                  {AUTO_SIZE_PARAMETERS_BY_SHAPE[shape].map((option) => (
+                    <option value={option.value} key={option.value}>{option.label}</option>
+                  ))}
+                </SelectField>
+                <Field
+                  label="Target headwater level"
+                  value={targetHeadwaterLevel}
+                  unit="m"
+                  onChange={setTargetHeadwaterLevel}
+                />
+              </div>
+            )}
+          </Section>
+
+          <Section number={5} title="Calculation basis">
             <p className="answer-note">
               Governing headwater is the greater of FHWA HDS-5 inlet control and
-              an outlet-control energy-balance approximation. Confirm blockage,
-              afflux and governing authority criteria before design issue. This
-              is not yet a certified replacement for the full legacy Hidroalcun
-              application (water-surface profiles, hydraulic jump and
-              auto-sizing remain deferred).
+              an outlet-control energy-balance approximation. Auto-size searches
+              for the smallest size meeting the target headwater; a scan-then-
+              bisect search finds the smallest adequate size even though
+              governing headwater is not always monotonic in culvert size.
+              Confirm blockage, afflux and governing authority criteria before
+              design issue. This is not yet a certified replacement for the
+              full legacy Hidroalcun application (water-surface profiles,
+              hydraulic jump, hydrograph batch processing and natural-channel
+              tailwater rating remain deferred).
             </p>
           </Section>
         </div>
@@ -327,6 +414,15 @@ export function CulvertTool() {
               <small>m</small>
             </strong>
           </div>
+          {autoSize?.result && (
+            <div className="auto-size-summary">
+              <span>Auto-sized {AUTO_SIZE_PARAMETER_NAMES[autoSize.result.parameter].toLowerCase()}</span>
+              <strong>{format(autoSize.result.solvedSize)} m</strong>
+              <small className={autoSize.result.converged ? "pass" : "fail"}>
+                {autoSize.result.converged ? "✓ converged" : "✕ no solution in search range"}
+              </small>
+            </div>
+          )}
           {calculation.error && <p className="proposal-error">⚠ {calculation.error}</p>}
           {result && (
             <>

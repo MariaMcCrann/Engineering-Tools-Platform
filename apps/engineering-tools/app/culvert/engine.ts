@@ -486,3 +486,89 @@ export function calculateCulvert(input: CulvertInput): CulvertResult {
   };
 }
 
+/**
+ * "diameter" solves a circular culvert's diameter; "height"/"width" solve one
+ * rectangular dimension while holding the other fixed; "side" solves a square
+ * culvert (width = height) as a single unknown. Ported from moddiseño.bas,
+ * which bisects the culvert size until the governing headwater matches a
+ * target design water level.
+ */
+export type AutoSizeParameter = "diameter" | "height" | "width" | "side";
+
+export interface AutoSizeResult {
+  parameter: AutoSizeParameter;
+  solvedSize: number;
+  converged: boolean;
+  result: CulvertResult;
+}
+
+const AUTO_SIZE_BOUNDS: Record<AutoSizeParameter, { lower: number; upper: number }> = {
+  diameter: { lower: 0.1, upper: 50 },
+  height: { lower: 0.1, upper: 25 },
+  width: { lower: 0.1, upper: 25 },
+  side: { lower: 0.1, upper: 25 },
+};
+
+/** Legacy convergence tolerance: |target - achieved headwater| < 0.2 m. */
+const AUTO_SIZE_TOLERANCE = 0.2;
+
+function inputAtSize(input: CulvertInput, parameter: AutoSizeParameter, size: number): CulvertInput {
+  if (parameter === "diameter") return { ...input, shape: "circular", diameter: size };
+  if (parameter === "side") return { ...input, shape: "rectangular", width: size, height: size };
+  if (parameter === "height") return { ...input, shape: "rectangular", height: size };
+  return { ...input, shape: "rectangular", width: size };
+}
+
+export function autoSizeCulvert(
+  input: CulvertInput,
+  parameter: AutoSizeParameter,
+  targetHeadwaterLevel: number,
+): AutoSizeResult {
+  if (!Number.isFinite(targetHeadwaterLevel)) {
+    throw new Error("Target headwater level must be a finite number.");
+  }
+  const inletLevel = input.inletInvertLevel ?? 0;
+  const targetDepth = targetHeadwaterLevel - inletLevel;
+  const { lower, upper } = AUTO_SIZE_BOUNDS[parameter];
+
+  const headwaterDepthAt = (size: number) =>
+    calculateCulvert(inputAtSize(input, parameter, size)).governingHeadwaterDepth;
+  const objective = (size: number) => targetDepth - headwaterDepthAt(size);
+
+  // Governing headwater is not monotonic in size (it falls as the barrel
+  // gains capacity, then rises again once outlet control's (yc+D)/2 term
+  // dominates at very large sizes). Scan upward from the lower bound and
+  // bisect within the first bracket where the objective changes sign, so
+  // the result is the smallest adequate size rather than an arbitrary root.
+  const sampleCount = 400;
+  let bracket: [number, number] | null = null;
+  let previousSize = lower;
+  let previousValue = objective(lower);
+  let bestSize = lower;
+  let bestAbsValue = Math.abs(previousValue);
+
+  for (let index = 1; index <= sampleCount; index += 1) {
+    const size = lower + (upper - lower) * (index / sampleCount);
+    const value = objective(size);
+    if (Number.isFinite(value) && Math.abs(value) < bestAbsValue) {
+      bestAbsValue = Math.abs(value);
+      bestSize = size;
+    }
+    if (
+      Number.isFinite(previousValue) && Number.isFinite(value) &&
+      Math.sign(previousValue) !== Math.sign(value)
+    ) {
+      bracket = [previousSize, size];
+      break;
+    }
+    previousSize = size;
+    previousValue = value;
+  }
+
+  const solvedSize = bracket ? bisect(objective, bracket[0], bracket[1]) : bestSize;
+  const result = calculateCulvert(inputAtSize(input, parameter, solvedSize));
+  const converged = Math.abs(targetDepth - result.governingHeadwaterDepth) < AUTO_SIZE_TOLERANCE;
+
+  return { parameter, solvedSize, converged, result };
+}
+

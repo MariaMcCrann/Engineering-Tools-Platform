@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  autoSizeCulvert,
   calculateCulvert,
   calculateInletControl,
   calculateOutletControl,
@@ -137,4 +138,39 @@ test("outlet-control uses the average of tailwater and (critical depth + rise)/2
   const outlet = calculateOutletControl(circular);
   const yc = solveCriticalDepth(circular);
   assert.ok(Math.abs(outlet.controllingTailwaterDepth - Math.max(0.5, (yc + 1.2) / 2)) < 1e-9);
+});
+
+test("auto-sizes a circular diameter to hit a target headwater level", () => {
+  const sized = autoSizeCulvert(circular, "diameter", 101.5); // 1.5 m depth above the 100 m invert
+  assert.equal(sized.converged, true);
+  assert.ok(Math.abs(sized.result.governingHeadwaterDepth - 1.5) < 0.2);
+  assert.equal(Number.isFinite(sized.solvedSize) && sized.solvedSize > 0, true);
+});
+
+test("auto-sizes a rectangular height with the width held fixed", () => {
+  const rectangular = { ...circular, shape: "rectangular", diameter: undefined, width: 1.5, height: 1.2, entranceType: "rectancon1" };
+  const sized = autoSizeCulvert(rectangular, "height", 101.5);
+  assert.equal(sized.converged, true);
+  assert.ok(Math.abs(sized.result.governingHeadwaterDepth - 1.5) < 0.2);
+});
+
+test("auto-sizes a square side (width and height solved together)", () => {
+  const rectangular = { ...circular, shape: "rectangular", diameter: undefined, width: 1.5, height: 1.2, entranceType: "rectancon1" };
+  const sized = autoSizeCulvert(rectangular, "side", 101.5);
+  assert.equal(sized.converged, true);
+  assert.equal(sized.result.fullFlowVelocity > 0, true);
+});
+
+test("a larger target headwater allows a smaller solved diameter", () => {
+  const tight = autoSizeCulvert(circular, "diameter", 100.8);
+  const loose = autoSizeCulvert(circular, "diameter", 101.8);
+  assert.ok(tight.converged && loose.converged);
+  assert.ok(loose.solvedSize < tight.solvedSize);
+});
+
+test("reports non-convergence when the target headwater is unreachable", () => {
+  // Tailwater alone (0.5 m) plus losses puts a floor under the achievable
+  // outlet-control headwater; a 0.05 m target can never be met.
+  const sized = autoSizeCulvert(circular, "diameter", 100.05);
+  assert.equal(sized.converged, false);
 });
