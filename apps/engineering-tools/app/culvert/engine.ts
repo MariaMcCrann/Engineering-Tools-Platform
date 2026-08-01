@@ -512,7 +512,7 @@ const AUTO_SIZE_BOUNDS: Record<AutoSizeParameter, { lower: number; upper: number
 /** Legacy convergence tolerance: |target - achieved headwater| < 0.2 m. */
 const AUTO_SIZE_TOLERANCE = 0.2;
 
-function inputAtSize(input: CulvertInput, parameter: AutoSizeParameter, size: number): CulvertInput {
+export function inputAtSize(input: CulvertInput, parameter: AutoSizeParameter, size: number): CulvertInput {
   if (parameter === "diameter") return { ...input, shape: "circular", diameter: size };
   if (parameter === "side") return { ...input, shape: "rectangular", width: size, height: size };
   if (parameter === "height") return { ...input, shape: "rectangular", height: size };
@@ -570,5 +570,244 @@ export function autoSizeCulvert(
   const converged = Math.abs(targetDepth - result.governingHeadwaterDepth) < AUTO_SIZE_TOLERANCE;
 
   return { parameter, solvedSize, converged, result };
+}
+
+// ---------------------------------------------------------------------------
+// Water-surface profile (standard-step method) and hydraulic jump location.
+//
+// Ported from the numerical core of modmetodoestandar.bas: an energy-balance
+// station-by-station march along the barrel, solving at each station for the
+// depth that balances H(y) + (Δx/2)Sf(y) against the previous station's
+// H − (Δx/2)Sf. The legacy app additionally has 17 profile-family modules
+// (modperfilinlet1-10.bas, modperfiloutlet1-7.bas) that each hardcode which
+// boundary depth, marching direction and jump-search heuristic to use for a
+// specific combination of slope/depth relationships, then splice segments
+// together. That case-by-case dispatch is NOT reproduced here — instead this
+// traces from whichever boundary the already-computed governing control
+// implies (outlet control ⇒ march upstream from the outlet depth; inlet
+// control, or a steep barrel, ⇒ march downstream from a near-critical inlet
+// depth), and locates a jump via the same conjugate-depth crossing concept
+// the legacy code uses. The traced curve is physically correct; the specific
+// legacy "profile family" labelling and jump-search tolerances are not
+// reproduced bit-for-bit.
+// ---------------------------------------------------------------------------
+
+export type ProfileDirection = "downstream" | "upstream";
+export type FlowRegime = "subcritical" | "supercritical";
+export type SlopeRegime = "mild" | "steep" | "critical";
+
+export interface ProfileStation {
+  x: number;
+  depth: number;
+  bedElevation: number;
+  waterSurfaceElevation: number;
+  velocity: number;
+  froudeNumber: number;
+}
+
+export interface WaterSurfaceProfile {
+  direction: ProfileDirection;
+  regime: FlowRegime;
+  stations: ProfileStation[];
+  reachedFull: boolean;
+}
+
+export interface HydraulicJump {
+  station: number;
+  upstreamDepth: number;
+  downstreamDepth: number;
+  length: number;
+}
+
+export interface CulvertProfileResult {
+  slopeRegime: SlopeRegime;
+  profiles: WaterSurfaceProfile[];
+  hydraulicJump: HydraulicJump | null;
+  note: string;
+}
+
+const PROFILE_STATION_COUNT = 60;
+/** Fraction of the way to the branch boundary (critical depth or barrel rise) treated as "reached". */
+const PROFILE_BRANCH_MARGIN = 0.995;
+const PROFILE_ENERGY_TOLERANCE = 1e-6;
+
+function froudeNumberAt(input: CulvertInput, depth: number, dischargePerBarrel: number): number {
+  const properties = sectionProperties(input, depth);
+  if (properties.area <= 0) return 0;
+  const velocity = dischargePerBarrel / properties.area;
+  const hydraulicDepth = properties.topWidth > 0 ? properties.area / properties.topWidth : depth;
+  return velocity / Math.sqrt(GRAVITY * Math.max(hydraulicDepth, EPSILON));
+}
+
+function stationAt(input: CulvertInput, x: number, depth: number, dischargePerBarrel: number): ProfileStation {
+  const properties = sectionProperties(input, depth);
+  const bedElevation = (input.inletInvertLevel ?? 0) - input.slope * x;
+  return {
+    x,
+    depth,
+    bedElevation,
+    waterSurfaceElevation: bedElevation + depth,
+    velocity: dischargePerBarrel / Math.max(properties.area, EPSILON),
+    froudeNumber: froudeNumberAt(input, depth, dischargePerBarrel),
+  };
+}
+
+/**
+ * Marches the standard-step energy balance from `startDepth` at one end of
+ * the barrel toward the other, staying within the subcritical (y > yc) or
+ * supercritical (y < yc) branch implied by `regime`.
+ */
+export function traceStandardStepProfile(
+  input: CulvertInput,
+  startDepth: number,
+  direction: ProfileDirection,
+  regime: FlowRegime,
+): WaterSurfaceProfile {
+  const height = culvertHeight(input);
+  const length = input.length;
+  const inletLevel = input.inletInvertLevel ?? 0;
+  const dischargePerBarrel = input.discharge / input.barrels;
+  const criticalDepth = solveCriticalDepth(input);
+  const stepSize = length / PROFILE_STATION_COUNT;
+  const signedStep = direction === "downstream" ? stepSize : -stepSize;
+
+  const branchLower = regime === "supercritical" ? EPSILON : criticalDepth * (2 - PROFILE_BRANCH_MARGIN);
+  const branchUpper = regime === "supercritical" ? criticalDepth * PROFILE_BRANCH_MARGIN : height * PROFILE_BRANCH_MARGIN;
+
+  const energyAt = (x: number, depth: number) => {
+    const properties = sectionProperties(input, depth);
+    const velocity = dischargePerBarrel / Math.max(properties.area, EPSILON);
+    return (inletLevel - input.slope * x) + depth + velocity ** 2 / (2 * GRAVITY);
+  };
+  const frictionSlopeAt = (depth: number) => {
+    const properties = sectionProperties(input, depth);
+    if (properties.area <= 0 || properties.hydraulicRadius <= 0) return 0;
+    return (dischargePerBarrel * input.roughness / (properties.area * properties.hydraulicRadius ** (2 / 3))) ** 2;
+  };
+
+  let x = direction === "downstream" ? 0 : length;
+  let depth = Math.min(Math.max(startDepth, branchLower), branchUpper);
+  const stations: ProfileStation[] = [stationAt(input, x, depth, dischargePerBarrel)];
+  let reachedFull = false;
+
+  for (let index = 1; index <= PROFILE_STATION_COUNT; index += 1) {
+    const previousX = x;
+    const previousDepth = depth;
+    const nextX = direction === "downstream" ? previousX + stepSize : previousX - stepSize;
+    if (nextX < -EPSILON || nextX > length + EPSILON) break;
+
+    const previousEnergy = energyAt(previousX, previousDepth);
+    const previousFrictionSlope = frictionSlopeAt(previousDepth);
+    const residual = (depthGuess: number) =>
+      energyAt(nextX, depthGuess) +
+      (signedStep / 2) * frictionSlopeAt(depthGuess) +
+      (signedStep / 2) * previousFrictionSlope -
+      previousEnergy;
+
+    const nextDepth = bisect(residual, branchLower, branchUpper);
+    if (Math.abs(residual(nextDepth)) > PROFILE_ENERGY_TOLERANCE * Math.max(1, Math.abs(previousEnergy))) {
+      // No depth on this branch balances the energy equation over this reach
+      // (the assumed flow regime has broken down) — stop marching here.
+      break;
+    }
+
+    x = nextX;
+    depth = nextDepth;
+    stations.push(stationAt(input, x, depth, dischargePerBarrel));
+
+    if (regime === "subcritical" && depth >= branchUpper) {
+      reachedFull = true;
+      break;
+    }
+  }
+
+  return { direction, regime, stations, reachedFull };
+}
+
+function depthAtStation(profile: WaterSurfaceProfile, x: number): number {
+  const stations = profile.stations;
+  if (stations.length === 0) return NaN;
+  // Stations run in x-ascending or x-descending order depending on direction; normalize to ascending.
+  const ascending = stations[0].x <= stations[stations.length - 1].x;
+  const ordered = ascending ? stations : [...stations].reverse();
+  if (x <= ordered[0].x) return ordered[0].depth;
+  if (x >= ordered[ordered.length - 1].x) return ordered[ordered.length - 1].depth;
+  for (let i = 1; i < ordered.length; i += 1) {
+    if (x <= ordered[i].x) {
+      const a = ordered[i - 1];
+      const b = ordered[i];
+      const t = (x - a.x) / Math.max(b.x - a.x, EPSILON);
+      return a.depth + t * (b.depth - a.depth);
+    }
+  }
+  return ordered[ordered.length - 1].depth;
+}
+
+/** USBR hydraulic-jump length approximation, ported from modinlet.bas / modoutlet.bas calculoresalto. */
+function jumpLength(upstreamDepth: number, upstreamFroude: number): number {
+  return upstreamDepth * 220 * Math.tanh((upstreamFroude - 1) / 22);
+}
+
+function findHydraulicJump(
+  supercritical: WaterSurfaceProfile,
+  subcritical: WaterSurfaceProfile,
+): HydraulicJump | null {
+  const stations = [...supercritical.stations].sort((a, b) => a.x - b.x);
+  for (const station of stations) {
+    const conjugateDepth = station.depth * (0.5 * (Math.sqrt(1 + 8 * station.froudeNumber ** 2) - 1));
+    const subcriticalDepth = depthAtStation(subcritical, station.x);
+    if (!Number.isFinite(subcriticalDepth)) continue;
+    if (conjugateDepth >= subcriticalDepth) {
+      return {
+        station: station.x,
+        upstreamDepth: station.depth,
+        downstreamDepth: conjugateDepth,
+        length: jumpLength(station.depth, station.froudeNumber),
+      };
+    }
+  }
+  return null;
+}
+
+export function traceCulvertProfile(input: CulvertInput): CulvertProfileResult {
+  validateInput(input);
+  const height = culvertHeight(input);
+  const normalDepth = solveNormalDepth(input);
+  const criticalDepth = solveCriticalDepth(input);
+  const calculation = calculateCulvert(input);
+
+  const slopeRegime: SlopeRegime =
+    Math.abs(normalDepth - criticalDepth) < 0.01 * Math.max(criticalDepth, EPSILON)
+      ? "critical"
+      : normalDepth > criticalDepth ? "mild" : "steep";
+
+  const profiles: WaterSurfaceProfile[] = [];
+  let note = "";
+
+  if (calculation.governingControl === "outlet") {
+    if (calculation.outletControl.controllingTailwaterDepth >= height) {
+      note = "The outlet-control depth reaches the culvert rise, so the barrel flows full near the outlet and no partial-flow water-surface profile applies there.";
+    } else {
+      profiles.push(traceStandardStepProfile(
+        input, calculation.outletControl.controllingTailwaterDepth, "upstream", "subcritical",
+      ));
+    }
+  }
+
+  if (calculation.governingControl === "inlet" || slopeRegime === "steep") {
+    profiles.push(traceStandardStepProfile(input, criticalDepth, "downstream", "supercritical"));
+  }
+
+  const supercriticalProfile = profiles.find((profile) => profile.regime === "supercritical");
+  const subcriticalProfile = profiles.find((profile) => profile.regime === "subcritical");
+  const hydraulicJump = supercriticalProfile && subcriticalProfile
+    ? findHydraulicJump(supercriticalProfile, subcriticalProfile)
+    : null;
+
+  if (!profiles.length && !note) {
+    note = "No partial-flow profile applies to this case.";
+  }
+
+  return { slopeRegime, profiles, hydraulicJump, note };
 }
 
