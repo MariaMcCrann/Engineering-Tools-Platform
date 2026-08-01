@@ -134,16 +134,52 @@ test("accepts custom entrance coefficients", () => {
   assert.ok(Math.abs(inlet.headwaterDepth - reference.headwaterDepth) < 1e-9);
 });
 
-test("outlet-control headwater subtracts exactly the invert drop (slope * length)", () => {
-  const flat = calculateOutletControl({ ...circular, slope: 0 });
-  const sloped = calculateOutletControl({ ...circular, slope: 0.01, length: 30 });
-  assert.ok(Math.abs((flat.headwaterDepth - sloped.headwaterDepth) - 0.3) < 1e-9);
+test("outlet-control headwater subtracts exactly the invert drop (slope * length), steep case", () => {
+  // Both slopes must stay steep (yn < yc) for this fixture so the comparison
+  // stays on the same (simplified FHWA) code path — see the mild-slope
+  // profile-based tests below for the case that no longer uses this formula.
+  const gentle = calculateOutletControl({ ...circular, slope: 0.009 });
+  const steeper = calculateOutletControl({ ...circular, slope: 0.01, length: 30 });
+  assert.ok(Math.abs((gentle.headwaterDepth - steeper.headwaterDepth) - (0.01 - 0.009) * 30) < 1e-9);
 });
 
 test("outlet-control uses the average of tailwater and (critical depth + rise)/2", () => {
   const outlet = calculateOutletControl(circular);
   const yc = solveCriticalDepth(circular);
   assert.ok(Math.abs(outlet.controllingTailwaterDepth - Math.max(0.5, (yc + 1.2) / 2)) < 1e-9);
+});
+
+test("mild-slope outlet control matches the actual backwater profile's inlet-end station", () => {
+  const mild = { ...circular, slope: 0.003 };
+  const yn = solveNormalDepth(mild);
+  const yc = solveCriticalDepth(mild);
+  assert.ok(yn > yc, "fixture must be on a mild slope for this check");
+
+  const outlet = calculateOutletControl(mild);
+  assert.equal(outlet.belowValidityThreshold, false);
+
+  const controllingTW = Math.max(mild.tailwaterDepth, (yc + 1.2) / 2);
+  const profile = traceStandardStepProfile(mild, controllingTW, "upstream", "subcritical", 40);
+  assert.equal(profile.reachedFull, false);
+  const last = profile.stations[profile.stations.length - 1];
+  const expected = last.depth + (1 + mild.entranceLossCoefficient) * last.velocity ** 2 / (2 * 9.80665);
+  assert.ok(Math.abs(outlet.headwaterDepth - expected) < 1e-9);
+});
+
+test("outlet control treats a barrel that can't convey the design flow as pressurized throughout", () => {
+  // Full-flow capacity for this fixture is well under the discharge below,
+  // so no open-channel equilibrium exists anywhere in the barrel even
+  // though the tailwater itself is far below the crown.
+  const overCapacity = { ...circular, slope: 0.00275, diameter: 1.2, discharge: 2.05, tailwaterDepth: 0.3 };
+  const capacity = manningDischarge(overCapacity, 1.2);
+  assert.ok(overCapacity.discharge > capacity, "fixture must exceed full-flow capacity for this check");
+
+  const outlet = calculateOutletControl(overCapacity);
+  const yc = solveCriticalDepth(overCapacity);
+  const expectedBase = Math.max(overCapacity.tailwaterDepth, (yc + 1.2) / 2);
+  assert.ok(Math.abs(outlet.controllingTailwaterDepth - expectedBase) < 1e-9);
+  assert.equal(outlet.belowValidityThreshold, false);
+  assert.equal(Number.isFinite(outlet.headwaterDepth), true);
 });
 
 test("auto-sizes a circular diameter to hit a target headwater level", () => {
