@@ -9,6 +9,8 @@ import {
   sectionProperties,
   solveCriticalDepth,
   solveNormalDepth,
+  traceCulvertProfile,
+  traceStandardStepProfile,
 } from "../app/culvert/engine.ts";
 
 const circular = {
@@ -173,4 +175,56 @@ test("reports non-convergence when the target headwater is unreachable", () => {
   // outlet-control headwater; a 0.05 m target can never be met.
   const sized = autoSizeCulvert(circular, "diameter", 100.05);
   assert.equal(sized.converged, false);
+});
+
+test("a standard-step profile started at normal depth stays at normal depth (uniform flow)", () => {
+  const mild = { ...circular, slope: 0.003 };
+  const yn = solveNormalDepth(mild);
+  const yc = solveCriticalDepth(mild);
+  assert.ok(yn > yc, "fixture must be on a mild slope for this check");
+
+  const profile = traceStandardStepProfile(mild, yn, "upstream", "subcritical");
+  const maxDeviation = Math.max(...profile.stations.map((s) => Math.abs(s.depth - yn)));
+  assert.ok(maxDeviation < 1e-6);
+});
+
+test("a supercritical profile accelerates downstream from near-critical depth", () => {
+  const steep = { ...circular, slope: 0.08, tailwaterDepth: 0.2 };
+  const profile = traceStandardStepProfile(steep, solveCriticalDepth(steep), "downstream", "supercritical");
+  const first = profile.stations[0];
+  const last = profile.stations[profile.stations.length - 1];
+  assert.ok(first.froudeNumber > 0.9 && first.froudeNumber < 1.1, "should start near critical (Fr ~ 1)");
+  assert.ok(last.froudeNumber > first.froudeNumber, "supercritical flow should accelerate downstream");
+  assert.ok(last.depth < first.depth, "depth should decrease as velocity increases downstream");
+});
+
+test("traceCulvertProfile finds a hydraulic jump on a steep, outlet-controlled barrel", () => {
+  const steepOutletControlled = { ...circular, slope: 0.01, tailwaterDepth: 0.5 };
+  const calc = calculateCulvert(steepOutletControlled);
+  assert.equal(calc.governingControl, "outlet");
+  const profile = traceCulvertProfile(steepOutletControlled);
+  assert.equal(profile.slopeRegime, "steep");
+  assert.equal(profile.profiles.length, 2);
+  assert.ok(profile.hydraulicJump !== null);
+  assert.ok(profile.hydraulicJump.downstreamDepth > profile.hydraulicJump.upstreamDepth);
+  assert.ok(profile.hydraulicJump.length > 0);
+  assert.ok(profile.hydraulicJump.station >= 0 && profile.hydraulicJump.station <= steepOutletControlled.length);
+});
+
+test("traceCulvertProfile traces only the supercritical branch under pure inlet control", () => {
+  const inletControlled = { ...circular, slope: 0.08, tailwaterDepth: 0.2 };
+  const calc = calculateCulvert(inletControlled);
+  assert.equal(calc.governingControl, "inlet");
+  const profile = traceCulvertProfile(inletControlled);
+  assert.equal(profile.profiles.length, 1);
+  assert.equal(profile.profiles[0].regime, "supercritical");
+  assert.equal(profile.hydraulicJump, null);
+});
+
+test("traceCulvertProfile reports a note instead of a profile when the outlet is submerged", () => {
+  const submergedOutlet = { ...circular, tailwaterDepth: 1.3 };
+  const calc = calculateCulvert(submergedOutlet);
+  assert.equal(calc.governingControl, "outlet");
+  const profile = traceCulvertProfile(submergedOutlet);
+  assert.ok(profile.note.length > 0);
 });

@@ -5,13 +5,19 @@ import {
   autoSizeCulvert,
   AutoSizeParameter,
   calculateCulvert,
+  culvertHeight,
   CulvertInput,
+  CulvertProfileResult,
   CulvertShape,
   EntranceCategory,
   ENTRANCE_CATEGORY_LABELS,
   ENTRANCE_OPTIONS,
   findEntranceOption,
+  HydraulicJump,
+  inputAtSize,
   InletEquationForm,
+  traceCulvertProfile,
+  WaterSurfaceProfile,
 } from "./culvert/engine";
 
 const numberValue = (value: string) => Number(value);
@@ -143,6 +149,85 @@ function runAutoSize(
   }
 }
 
+function runProfile(input: CulvertInput): { result: CulvertProfileResult | null; error: string } {
+  try {
+    return { result: traceCulvertProfile(input), error: "" };
+  } catch (error) {
+    return { result: null, error: error instanceof Error ? error.message : "Profile calculation failed." };
+  }
+}
+
+const REGIME_LABELS: Record<WaterSurfaceProfile["regime"], string> = {
+  subcritical: "Subcritical (outlet-control side)",
+  supercritical: "Supercritical (inlet-control side)",
+};
+
+function ProfileChart({
+  length, height, inletLevel, slope, profiles, jump,
+}: {
+  length: number;
+  height: number;
+  inletLevel: number;
+  slope: number;
+  profiles: WaterSurfaceProfile[];
+  jump: HydraulicJump | null;
+}) {
+  const width = 700;
+  const viewHeight = 260;
+  const pad = 28;
+  const span = Math.max(length, 0.001);
+  const outletLevel = inletLevel - slope * length;
+
+  const elevations = [
+    inletLevel, outletLevel, inletLevel + height, outletLevel + height,
+    ...profiles.flatMap((profile) => profile.stations.map((station) => station.waterSurfaceElevation)),
+  ];
+  const elevMin = Math.min(...elevations);
+  const elevMax = Math.max(...elevations);
+  const elevRange = Math.max(elevMax - elevMin, 0.001);
+
+  const xScale = (x: number) => pad + (x / span) * (width - 2 * pad);
+  const yScale = (elevation: number) =>
+    (viewHeight - pad) - ((elevation - elevMin) / elevRange) * (viewHeight - 2 * pad);
+
+  const jumpBedElevation = jump ? inletLevel - slope * jump.station : 0;
+
+  return (
+    <div className="profile-chart">
+      <svg viewBox={`0 0 ${width} ${viewHeight}`} preserveAspectRatio="xMidYMid meet">
+        <line
+          className="profile-invert"
+          x1={xScale(0)} y1={yScale(inletLevel)} x2={xScale(length)} y2={yScale(outletLevel)}
+        />
+        <line
+          className="profile-crown"
+          x1={xScale(0)} y1={yScale(inletLevel + height)} x2={xScale(length)} y2={yScale(outletLevel + height)}
+        />
+        {profiles.map((profile) => (
+          <polyline
+            key={profile.direction + profile.regime}
+            className={`profile-line profile-${profile.regime}`}
+            points={profile.stations.map((s) => `${xScale(s.x)},${yScale(s.waterSurfaceElevation)}`).join(" ")}
+          />
+        ))}
+        {jump && (
+          <line
+            className="profile-jump"
+            x1={xScale(jump.station)} y1={yScale(jumpBedElevation)}
+            x2={xScale(jump.station)} y2={yScale(jumpBedElevation + height)}
+          />
+        )}
+      </svg>
+      <div className="profile-legend">
+        {profiles.map((profile) => (
+          <span key={profile.regime}><i className={`profile-swatch ${profile.regime}`} />{REGIME_LABELS[profile.regime]}</span>
+        ))}
+        {jump && <span><i className="profile-swatch jump" />Hydraulic jump</span>}
+      </div>
+    </div>
+  );
+}
+
 export function CulvertTool() {
   const [shape, setShape] = useState<CulvertShape>("circular");
   const [diameter, setDiameter] = useState("1.2");
@@ -168,6 +253,8 @@ export function CulvertTool() {
   const [autoSizeEnabled, setAutoSizeEnabled] = useState(false);
   const [autoSizeParameter, setAutoSizeParameter] = useState<AutoSizeParameter>("diameter");
   const [targetHeadwaterLevel, setTargetHeadwaterLevel] = useState("1.5");
+
+  const [showProfile, setShowProfile] = useState(false);
 
   const selectedEntrance = entranceType === "custom" ? undefined : findEntranceOption(entranceType);
 
@@ -215,6 +302,11 @@ export function CulvertTool() {
   const calculation = autoSize
     ? { result: autoSize.result?.result ?? null, error: autoSize.error }
     : runCulvertCalculation(input);
+
+  const effectiveInput = autoSize?.result
+    ? inputAtSize(input, autoSize.result.parameter, autoSize.result.solvedSize)
+    : input;
+  const profile = showProfile ? runProfile(effectiveInput) : null;
 
   const download = () => {
     if (!calculation.result) return;
@@ -389,18 +481,62 @@ export function CulvertTool() {
             )}
           </Section>
 
-          <Section number={5} title="Calculation basis">
+          <Section number={5} title="Water-surface profile">
+            <label className="research-check">
+              <input
+                type="checkbox"
+                checked={showProfile}
+                onChange={(event) => setShowProfile(event.target.checked)}
+              />
+              <span>
+                <strong>Trace the water-surface profile</strong>
+                <small>Standard-step energy-balance march from the governing boundary, with hydraulic-jump detection on steep, outlet-influenced barrels.</small>
+              </span>
+            </label>
+            {showProfile && profile?.error && <p className="proposal-error">⚠ {profile.error}</p>}
+            {showProfile && profile?.result && (
+              <>
+                <div className="check-row">
+                  <span className="pass">{profile.result.slopeRegime} slope</span>
+                  {profile.result.hydraulicJump && <span className="warn">! Hydraulic jump detected</span>}
+                </div>
+                {profile.result.note && <p className="answer-note">{profile.result.note}</p>}
+                {profile.result.profiles.length > 0 && (
+                  <ProfileChart
+                    length={effectiveInput.length}
+                    height={culvertHeight(effectiveInput)}
+                    inletLevel={effectiveInput.inletInvertLevel ?? 0}
+                    slope={effectiveInput.slope}
+                    profiles={profile.result.profiles}
+                    jump={profile.result.hydraulicJump}
+                  />
+                )}
+                {profile.result.hydraulicJump && (
+                  <div className="entrance-coefficients">
+                    <Metric name="Jump station" value={`${format(profile.result.hydraulicJump.station, 1)} m`} />
+                    <Metric name="Upstream depth" value={`${format(profile.result.hydraulicJump.upstreamDepth)} m`} />
+                    <Metric name="Downstream depth" value={`${format(profile.result.hydraulicJump.downstreamDepth)} m`} />
+                    <Metric name="Jump length (USBR)" value={`${format(profile.result.hydraulicJump.length, 2)} m`} />
+                  </div>
+                )}
+              </>
+            )}
+          </Section>
+
+          <Section number={6} title="Calculation basis">
             <p className="answer-note">
               Governing headwater is the greater of FHWA HDS-5 inlet control and
               an outlet-control energy-balance approximation. Auto-size searches
               for the smallest size meeting the target headwater; a scan-then-
               bisect search finds the smallest adequate size even though
-              governing headwater is not always monotonic in culvert size.
-              Confirm blockage, afflux and governing authority criteria before
-              design issue. This is not yet a certified replacement for the
-              full legacy Hidroalcun application (water-surface profiles,
-              hydraulic jump, hydrograph batch processing and natural-channel
-              tailwater rating remain deferred).
+              governing headwater is not always monotonic in culvert size. The
+              water-surface profile traces from whichever boundary the
+              governing control implies rather than reproducing the legacy
+              app&apos;s 17 named profile-family cases exactly. Confirm
+              blockage, afflux and governing authority criteria before design
+              issue. This is not yet a certified replacement for the full
+              legacy Hidroalcun application (hydrograph batch processing and
+              natural-channel tailwater rating remain deferred).
             </p>
           </Section>
         </div>
