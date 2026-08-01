@@ -16,6 +16,9 @@ import {
   HydraulicJump,
   inputAtSize,
   InletEquationForm,
+  solveNaturalChannelDepth,
+  solveRectangularChannelDepth,
+  solveTrapezoidalChannelDepth,
   traceCulvertProfile,
   WaterSurfaceProfile,
 } from "./culvert/engine";
@@ -157,6 +160,88 @@ function runProfile(input: CulvertInput): { result: CulvertProfileResult | null;
   }
 }
 
+type TailwaterSource = "direct" | "rectangular" | "trapezoidal" | "natural";
+
+const TAILWATER_SOURCE_LABELS: Record<TailwaterSource, string> = {
+  direct: "Direct entry",
+  rectangular: "Rectangular channel",
+  trapezoidal: "Trapezoidal channel",
+  natural: "Natural channel (surveyed cross-section)",
+};
+
+interface ChannelPointInput {
+  station: string;
+  elevation: string;
+}
+
+function runChannelTailwater(
+  source: TailwaterSource,
+  discharge: number,
+  base: number,
+  sideSlope: number,
+  manningN: number,
+  channelSlope: number,
+  points: ChannelPointInput[],
+): { result: number | null; error: string } {
+  try {
+    if (source === "rectangular") {
+      return { result: solveRectangularChannelDepth(discharge, { base, manningN, slope: channelSlope }), error: "" };
+    }
+    if (source === "trapezoidal") {
+      return {
+        result: solveTrapezoidalChannelDepth(discharge, { base, sideSlope, manningN, slope: channelSlope }),
+        error: "",
+      };
+    }
+    if (source === "natural") {
+      return {
+        result: solveNaturalChannelDepth(discharge, {
+          points: points.map((p) => ({ station: numberValue(p.station), elevation: numberValue(p.elevation) })),
+          manningN,
+          slope: channelSlope,
+        }),
+        error: "",
+      };
+    }
+    return { result: null, error: "" };
+  } catch (error) {
+    return { result: null, error: error instanceof Error ? error.message : "Channel tailwater calculation failed." };
+  }
+}
+
+function NaturalChannelTable({
+  points, onChange,
+}: {
+  points: ChannelPointInput[];
+  onChange: (points: ChannelPointInput[]) => void;
+}) {
+  const updatePoint = (index: number, field: keyof ChannelPointInput, value: string) => {
+    onChange(points.map((point, i) => (i === index ? { ...point, [field]: value } : point)));
+  };
+  const addPoint = () => onChange([...points, { station: "", elevation: "" }]);
+  const removePoint = (index: number) => onChange(points.filter((_, i) => i !== index));
+
+  return (
+    <div className="channel-points-table">
+      <table>
+        <thead><tr><th>Station (m)</th><th>Elevation (m AHD / datum)</th><th /></tr></thead>
+        <tbody>
+          {points.map((point, index) => (
+            <tr key={index}>
+              <td><input type="number" step="any" value={point.station} onChange={(e) => updatePoint(index, "station", e.target.value)} /></td>
+              <td><input type="number" step="any" value={point.elevation} onChange={(e) => updatePoint(index, "elevation", e.target.value)} /></td>
+              <td>
+                <button type="button" onClick={() => removePoint(index)} disabled={points.length <= 2} aria-label="Remove point">×</button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <button type="button" className="add-point-btn" onClick={addPoint}>+ Add point</button>
+    </div>
+  );
+}
+
 const REGIME_LABELS: Record<WaterSurfaceProfile["regime"], string> = {
   subcritical: "Subcritical (outlet-control side)",
   supercritical: "Supercritical (inlet-control side)",
@@ -256,6 +341,18 @@ export function CulvertTool() {
 
   const [showProfile, setShowProfile] = useState(false);
 
+  const [tailwaterSource, setTailwaterSource] = useState<TailwaterSource>("direct");
+  const [channelBase, setChannelBase] = useState("2");
+  const [channelSideSlope, setChannelSideSlope] = useState("2");
+  const [channelManningN, setChannelManningN] = useState("0.03");
+  const [channelSlope, setChannelSlope] = useState("0.005");
+  const [naturalPoints, setNaturalPoints] = useState<ChannelPointInput[]>([
+    { station: "-5", elevation: "2" },
+    { station: "-1", elevation: "0" },
+    { station: "1", elevation: "0" },
+    { station: "5", elevation: "2" },
+  ]);
+
   const selectedEntrance = entranceType === "custom" ? undefined : findEntranceOption(entranceType);
 
   const handleEntranceChange = (id: string) => {
@@ -276,6 +373,14 @@ export function CulvertTool() {
     }
   };
 
+  const channelTailwater = tailwaterSource !== "direct"
+    ? runChannelTailwater(
+        tailwaterSource, numberValue(discharge), numberValue(channelBase), numberValue(channelSideSlope),
+        numberValue(channelManningN), numberValue(channelSlope), naturalPoints,
+      )
+    : null;
+  const effectiveTailwaterDepth = channelTailwater?.result ?? numberValue(tailwaterDepth);
+
   const input: CulvertInput = {
     shape,
     diameter: numberValue(diameter),
@@ -286,7 +391,7 @@ export function CulvertTool() {
     slope: numberValue(slope),
     roughness: numberValue(roughness),
     discharge: numberValue(discharge),
-    tailwaterDepth: numberValue(tailwaterDepth),
+    tailwaterDepth: effectiveTailwaterDepth,
     entranceLossCoefficient: numberValue(entranceLoss),
     outletLossCoefficient: numberValue(outletLoss),
     inletInvertLevel: numberValue(invertLevel),
@@ -441,11 +546,47 @@ export function CulvertTool() {
           <Section number={3} title="Hydraulic conditions">
             <div className="calc-fields">
               <Field label="Design discharge" value={discharge} unit="m³/s" onChange={setDischarge} />
-              <Field label="Tailwater depth" value={tailwaterDepth} unit="m" onChange={setTailwaterDepth} />
+              <SelectField
+                label="Tailwater source"
+                value={tailwaterSource}
+                onChange={(value) => setTailwaterSource(value as TailwaterSource)}
+              >
+                {(Object.keys(TAILWATER_SOURCE_LABELS) as TailwaterSource[]).map((source) => (
+                  <option value={source} key={source}>{TAILWATER_SOURCE_LABELS[source]}</option>
+                ))}
+              </SelectField>
+              {tailwaterSource === "direct" ? (
+                <Field label="Tailwater depth" value={tailwaterDepth} unit="m" onChange={setTailwaterDepth} />
+              ) : (
+                <div className="calc-field">
+                  <span>Tailwater depth (computed)</span>
+                  <strong className="computed-value">
+                    {channelTailwater?.result != null ? `${format(channelTailwater.result)} m` : "—"}
+                  </strong>
+                </div>
+              )}
               <Field label="Entrance loss coefficient" value={entranceLoss} onChange={setEntranceLoss} />
               <Field label="Outlet loss coefficient" value={outletLoss} onChange={setOutletLoss} />
               <Field label="Inlet invert level" value={invertLevel} unit="m" onChange={setInvertLevel} />
             </div>
+            {tailwaterSource !== "direct" && (
+              <>
+                <div className="calc-fields">
+                  {(tailwaterSource === "rectangular" || tailwaterSource === "trapezoidal") && (
+                    <Field label="Channel base width" value={channelBase} unit="m" onChange={setChannelBase} />
+                  )}
+                  {tailwaterSource === "trapezoidal" && (
+                    <Field label="Channel side slope (H:V)" value={channelSideSlope} onChange={setChannelSideSlope} />
+                  )}
+                  <Field label="Channel Manning's n" value={channelManningN} onChange={setChannelManningN} />
+                  <Field label="Channel slope" value={channelSlope} unit="m/m" onChange={setChannelSlope} />
+                </div>
+                {tailwaterSource === "natural" && (
+                  <NaturalChannelTable points={naturalPoints} onChange={setNaturalPoints} />
+                )}
+                {channelTailwater?.error && <p className="proposal-error">⚠ {channelTailwater.error}</p>}
+              </>
+            )}
           </Section>
 
           <Section number={4} title="Auto-size (design mode)">

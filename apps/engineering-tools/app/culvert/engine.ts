@@ -811,3 +811,149 @@ export function traceCulvertProfile(input: CulvertInput): CulvertProfileResult {
   return { slopeRegime, profiles, hydraulicJump, note };
 }
 
+// ---------------------------------------------------------------------------
+// Receiving-channel tailwater rating (normal depth of the downstream
+// channel), ported from modprecalculos.bas calculoy2()/calculoy2canalnatural.
+// Rectangular and trapezoidal channels assume the channel invert coincides
+// with the culvert outlet invert, matching the legacy behaviour for those two
+// cases. The natural-channel solver here takes cross-section points on the
+// same absolute elevation datum as inletInvertLevel (rather than a depth
+// relative to a separately-entered channel bottom level, as the legacy form
+// requires) and computes wetted area/perimeter by clipping the surveyed
+// polyline at a trial water elevation — mathematically the same rating-curve
+// concept as the legacy's 50-point discretization, just computed directly
+// from the polyline instead of pre-binning into fixed depth increments.
+// ---------------------------------------------------------------------------
+
+export interface RectangularChannel {
+  base: number;
+  manningN: number;
+  slope: number;
+}
+
+export interface TrapezoidalChannel {
+  base: number;
+  sideSlope: number;
+  manningN: number;
+  slope: number;
+}
+
+export interface NaturalChannelPoint {
+  station: number;
+  elevation: number;
+}
+
+export interface NaturalChannel {
+  points: NaturalChannelPoint[];
+  manningN: number;
+  slope: number;
+}
+
+function solveChannelNormalDepth(
+  dischargeTarget: number,
+  areaAndPerimeterAt: (depth: number) => { area: number; perimeter: number },
+  manningN: number,
+  channelSlope: number,
+): number {
+  const capacity = (depth: number) => {
+    const { area, perimeter } = areaAndPerimeterAt(depth);
+    if (area <= 0 || perimeter <= 0) return 0;
+    return area * (area / perimeter) ** (2 / 3) * Math.sqrt(channelSlope) / manningN;
+  };
+  let upper = 1;
+  while (capacity(upper) < dischargeTarget && upper < 1e6) upper *= 2;
+  return bisect((depth) => capacity(depth) - dischargeTarget, upper * 1e-9, upper);
+}
+
+export function solveRectangularChannelDepth(discharge: number, channel: RectangularChannel): number {
+  assertPositive("Discharge", discharge);
+  assertPositive("Channel base", channel.base);
+  assertPositive("Channel Manning n", channel.manningN);
+  assertPositive("Channel slope", channel.slope);
+  return solveChannelNormalDepth(
+    discharge,
+    (depth) => ({ area: channel.base * depth, perimeter: channel.base + 2 * depth }),
+    channel.manningN,
+    channel.slope,
+  );
+}
+
+export function solveTrapezoidalChannelDepth(discharge: number, channel: TrapezoidalChannel): number {
+  assertPositive("Discharge", discharge);
+  assertPositive("Channel base", channel.base);
+  assertPositive("Channel Manning n", channel.manningN);
+  assertPositive("Channel slope", channel.slope);
+  if (!Number.isFinite(channel.sideSlope) || channel.sideSlope < 0) {
+    throw new Error("Channel side slope cannot be negative.");
+  }
+  return solveChannelNormalDepth(
+    discharge,
+    (depth) => ({
+      area: depth * (channel.base + channel.sideSlope * depth),
+      perimeter: channel.base + 2 * depth * Math.sqrt(1 + channel.sideSlope ** 2),
+    }),
+    channel.manningN,
+    channel.slope,
+  );
+}
+
+function naturalChannelSectionProperties(
+  sortedPoints: NaturalChannelPoint[],
+  waterElevation: number,
+): { area: number; perimeter: number } {
+  let area = 0;
+  let perimeter = 0;
+  for (let index = 0; index < sortedPoints.length - 1; index += 1) {
+    const p1 = sortedPoints[index];
+    const p2 = sortedPoints[index + 1];
+    if (p1.elevation >= waterElevation && p2.elevation >= waterElevation) continue;
+
+    let x1 = p1.station;
+    let z1 = p1.elevation;
+    let x2 = p2.station;
+    let z2 = p2.elevation;
+    if (z1 > waterElevation) {
+      const t = (waterElevation - z2) / (z1 - z2);
+      x1 = p2.station + t * (p1.station - p2.station);
+      z1 = waterElevation;
+    }
+    if (z2 > waterElevation) {
+      const t = (waterElevation - z1) / (z2 - z1);
+      x2 = p1.station + t * (p2.station - p1.station);
+      z2 = waterElevation;
+    }
+    area += 0.5 * (waterElevation - z1 + (waterElevation - z2)) * Math.abs(x2 - x1);
+    perimeter += Math.hypot(x2 - x1, z2 - z1);
+  }
+  return { area, perimeter };
+}
+
+export function solveNaturalChannelDepth(discharge: number, channel: NaturalChannel): number {
+  assertPositive("Discharge", discharge);
+  assertPositive("Channel Manning n", channel.manningN);
+  assertPositive("Channel slope", channel.slope);
+  if (channel.points.length < 2) {
+    throw new Error("A natural channel cross-section needs at least two points.");
+  }
+  const sorted = [...channel.points].sort((a, b) => a.station - b.station);
+  const thalweg = Math.min(...sorted.map((point) => point.elevation));
+  const crest = Math.max(...sorted.map((point) => point.elevation));
+  if (crest <= thalweg) {
+    throw new Error("The natural channel cross-section must include a bank above the lowest point.");
+  }
+
+  const capacity = (elevation: number) => {
+    const { area, perimeter } = naturalChannelSectionProperties(sorted, elevation);
+    if (area <= 0 || perimeter <= 0) return 0;
+    return area * (area / perimeter) ** (2 / 3) * Math.sqrt(channel.slope) / channel.manningN;
+  };
+
+  if (discharge >= capacity(crest)) return crest - thalweg;
+  const solvedElevation = bisect(
+    (elevation) => capacity(elevation) - discharge,
+    thalweg + (crest - thalweg) * 1e-6,
+    crest - (crest - thalweg) * 1e-9,
+  );
+  return solvedElevation - thalweg;
+}
+

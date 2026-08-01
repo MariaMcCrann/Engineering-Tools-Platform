@@ -8,7 +8,10 @@ import {
   manningDischarge,
   sectionProperties,
   solveCriticalDepth,
+  solveNaturalChannelDepth,
   solveNormalDepth,
+  solveRectangularChannelDepth,
+  solveTrapezoidalChannelDepth,
   traceCulvertProfile,
   traceStandardStepProfile,
 } from "../app/culvert/engine.ts";
@@ -227,4 +230,79 @@ test("traceCulvertProfile reports a note instead of a profile when the outlet is
   assert.equal(calc.governingControl, "outlet");
   const profile = traceCulvertProfile(submergedOutlet);
   assert.ok(profile.note.length > 0);
+});
+
+test("solves a rectangular channel's normal depth so it round-trips through Manning's equation", () => {
+  const channel = { base: 2, manningN: 0.03, slope: 0.005 };
+  const depth = solveRectangularChannelDepth(3, channel);
+  const area = channel.base * depth;
+  const perimeter = channel.base + 2 * depth;
+  const capacity = area * (area / perimeter) ** (2 / 3) * Math.sqrt(channel.slope) / channel.manningN;
+  assert.ok(Math.abs(capacity - 3) < 1e-6);
+});
+
+test("solves a trapezoidal channel's normal depth so it round-trips through Manning's equation", () => {
+  const channel = { base: 2, sideSlope: 2, manningN: 0.03, slope: 0.005 };
+  const depth = solveTrapezoidalChannelDepth(3, channel);
+  const area = depth * (channel.base + channel.sideSlope * depth);
+  const perimeter = channel.base + 2 * depth * Math.sqrt(1 + channel.sideSlope ** 2);
+  const capacity = area * (area / perimeter) ** (2 / 3) * Math.sqrt(channel.slope) / channel.manningN;
+  assert.ok(Math.abs(capacity - 3) < 1e-6);
+});
+
+test("a natural channel cross-section shaped like a trapezoid matches the closed-form trapezoidal solver", () => {
+  // Bed from station -1 to 1 (base = 2); banks rising from elevation 0 to 2
+  // over a horizontal run of 4 (side slope = run/rise = 2) on each side.
+  const natural = solveNaturalChannelDepth(3, {
+    points: [
+      { station: -5, elevation: 2 },
+      { station: -1, elevation: 0 },
+      { station: 1, elevation: 0 },
+      { station: 5, elevation: 2 },
+    ],
+    manningN: 0.03,
+    slope: 0.005,
+  });
+  const trapezoidal = solveTrapezoidalChannelDepth(3, { base: 2, sideSlope: 2, manningN: 0.03, slope: 0.005 });
+  assert.ok(Math.abs(natural - trapezoidal) < 1e-6);
+});
+
+test("channel solvers reject invalid geometry and unsorted natural-channel points still work", () => {
+  assert.throws(() => solveRectangularChannelDepth(3, { base: 0, manningN: 0.03, slope: 0.005 }), /base/);
+  assert.throws(
+    () => solveTrapezoidalChannelDepth(3, { base: 2, sideSlope: -1, manningN: 0.03, slope: 0.005 }),
+    /side slope/,
+  );
+  assert.throws(
+    () => solveNaturalChannelDepth(3, { points: [{ station: 0, elevation: 0 }], manningN: 0.03, slope: 0.005 }),
+    /at least two points/,
+  );
+  // Points supplied out of station order should sort internally and give the same answer.
+  const forward = solveNaturalChannelDepth(3, {
+    points: [
+      { station: -5, elevation: 2 }, { station: -1, elevation: 0 },
+      { station: 1, elevation: 0 }, { station: 5, elevation: 2 },
+    ],
+    manningN: 0.03, slope: 0.005,
+  });
+  const shuffled = solveNaturalChannelDepth(3, {
+    points: [
+      { station: 5, elevation: 2 }, { station: -5, elevation: 2 },
+      { station: 1, elevation: 0 }, { station: -1, elevation: 0 },
+    ],
+    manningN: 0.03, slope: 0.005,
+  });
+  assert.ok(Math.abs(forward - shuffled) < 1e-9);
+});
+
+test("a discharge exceeding the natural channel's surveyed capacity is capped at the bank crest", () => {
+  const channel = {
+    points: [
+      { station: -5, elevation: 2 }, { station: -1, elevation: 0 },
+      { station: 1, elevation: 0 }, { station: 5, elevation: 2 },
+    ],
+    manningN: 0.03, slope: 0.005,
+  };
+  const depth = solveNaturalChannelDepth(1e6, channel);
+  assert.ok(Math.abs(depth - 2) < 1e-9);
 });
