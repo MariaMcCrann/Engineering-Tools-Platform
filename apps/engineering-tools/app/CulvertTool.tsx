@@ -774,18 +774,22 @@ export function CulvertTool() {
 
           <Section number={6} title="Calculation basis">
             <p className="answer-note">
-              Governing headwater is the greater of FHWA HDS-5 inlet control and
-              an outlet-control energy-balance approximation. Auto-size searches
-              for the smallest size meeting the target headwater; a scan-then-
-              bisect search finds the smallest adequate size even though
-              governing headwater is not always monotonic in culvert size. The
+              Governing headwater is the greater of FHWA HDS-5 inlet control
+              and outlet control. On a mild slope, outlet control is computed
+              by tracing the actual backwater profile from the outlet to the
+              inlet (continuing as pressurized pipe flow if the barrel fills
+              before reaching the inlet); on a steep slope, where a hydraulic
+              jump may form inside the barrel, it falls back to the FHWA
+              simplified energy approximation. Auto-size searches for the
+              smallest size meeting the target headwater; a scan-then-bisect
+              search finds the smallest adequate size even though governing
+              headwater is not always monotonic in culvert size. The
               water-surface profile traces from whichever boundary the
               governing control implies rather than reproducing the legacy
               app&apos;s 17 named profile-family cases exactly. Confirm
               blockage, afflux and governing authority criteria before design
               issue. This is not yet a certified replacement for the full
-              legacy Hidroalcun application (hydrograph batch processing and
-              natural-channel tailwater rating remain deferred).
+              legacy Hidroalcun application.
             </p>
           </Section>
         </div>

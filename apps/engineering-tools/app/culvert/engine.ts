@@ -389,24 +389,103 @@ export function calculateInletControl(input: CulvertInput): InletControlResult {
   };
 }
 
-/** FHWA outlet-control energy equation, ported from modoutlet.bas / y1simplificado + calculoconductolleno. */
+/** Station count for the backwater march run internally by calculateOutletControl (cheaper than the 60-station display trace). */
+const OUTLET_CONTROL_MARCH_STATIONS = 40;
+
+/**
+ * Outlet control, ported from modoutlet.bas. Three cases, matching the
+ * legacy dispatch in calculohw1outlet:
+ *  - Tailwater alone submerges the outlet, or the barrel's own full-flow
+ *    capacity can't convey the discharge at all (so no open-channel
+ *    equilibrium depth exists below the crown, even where mild-slope
+ *    normal depth would clamp to the rise): the whole barrel is pressurized
+ *    from the outlet, so the full-pipe energy equation applies directly
+ *    (modperfiloutlet6.bas calculoconductolleno).
+ *  - Mild slope (yn > yc): the legacy traces the actual M-curve backwater
+ *    profile from the outlet to the inlet (modperfiloutlet1.bas and
+ *    similar). This is reproduced here using the same standard-step engine
+ *    as the water-surface profile feature — if the barrel fills before
+ *    reaching the inlet, the remaining reach is continued as pressurized
+ *    (constant-velocity) pipe flow rather than open channel.
+ *  - Steep slope: a hydraulic jump may form inside the barrel, which this
+ *    port does not resolve exactly (see traceCulvertProfile's docs). Falls
+ *    back to the FHWA simplified energy approximation, matching phase 2.
+ */
 export function calculateOutletControl(input: CulvertInput): OutletControlResult {
   const height = culvertHeight(input);
   const dischargePerBarrel = input.discharge / input.barrels;
   const fullProperties = sectionProperties(input, height);
   const fullFlowVelocity = dischargePerBarrel / Math.max(fullProperties.area, EPSILON);
+  const fullFrictionSlope = fullProperties.area > 0 && fullProperties.hydraulicRadius > 0
+    ? (dischargePerBarrel * input.roughness / (fullProperties.area * fullProperties.hydraulicRadius ** (2 / 3))) ** 2
+    : 0;
   const criticalDepth = solveCriticalDepth(input);
+  const normalDepth = solveNormalDepth(input);
   const inletLevel = input.inletInvertLevel ?? 0;
   const invertDrop = input.slope * input.length;
-
   const controllingTailwaterDepth = Math.max(input.tailwaterDepth, (criticalDepth + height) / 2);
-  const velocityHead = fullFlowVelocity ** 2 / (2 * GRAVITY);
-  const frictionLoss = (input.roughness ** 2 * input.length * fullFlowVelocity ** 2) /
-    Math.max(fullProperties.hydraulicRadius ** (4 / 3), EPSILON);
-  const minorLoss = (input.entranceLossCoefficient + input.outletLossCoefficient) * velocityHead;
+  const fullFlowCapacity = manningDischarge(input, height);
 
+  // Case 1: tailwater alone submerges the outlet, or the barrel can't convey
+  // the discharge at all (no open-channel equilibrium exists below the
+  // crown, so an open-channel march would produce a physically meaningless
+  // result — see calculateOutletControl's doc comment).
+  const outletSubmerged = input.tailwaterDepth >= height;
+  const capacityExceeded = input.discharge > fullFlowCapacity;
+  if (outletSubmerged || capacityExceeded) {
+    const baseDepth = outletSubmerged ? input.tailwaterDepth : controllingTailwaterDepth;
+    const velocityHead = fullFlowVelocity ** 2 / (2 * GRAVITY);
+    const frictionLoss = fullFrictionSlope * input.length;
+    const minorLoss = (input.entranceLossCoefficient + input.outletLossCoefficient) * velocityHead;
+    const headwaterDepth = baseDepth + frictionLoss + minorLoss - invertDrop;
+    return {
+      controllingTailwaterDepth: baseDepth,
+      frictionLoss,
+      minorLoss,
+      headwaterDepth,
+      headwaterLevel: inletLevel + headwaterDepth,
+      belowValidityThreshold: false,
+    };
+  }
+
+  // Case 2: mild slope — trace the actual backwater profile.
+  if (normalDepth > criticalDepth) {
+    const profile = traceStandardStepProfile(
+      input, controllingTailwaterDepth, "upstream", "subcritical", OUTLET_CONTROL_MARCH_STATIONS,
+    );
+    // When reachedFull, traceStandardStepProfile appends a synthetic
+    // domain-boundary station at crown depth for display purposes — find
+    // the actual transition-to-pressurized station, not that display point.
+    const openChannelStations = profile.reachedFull
+      ? profile.stations.filter((station) => station.depth < height - EPSILON)
+      : profile.stations;
+    const last = openChannelStations[openChannelStations.length - 1];
+    const finalVelocity = profile.reachedFull ? fullFlowVelocity : last.velocity;
+    const entranceLossTerm = (1 + input.entranceLossCoefficient) * finalVelocity ** 2 / (2 * GRAVITY);
+
+    const headwaterDepth = profile.reachedFull
+      // Barrel fills before the inlet: continue as pressurized pipe flow for the remaining reach.
+      ? height + last.x * (fullFrictionSlope - input.slope) + entranceLossTerm
+      : last.depth + entranceLossTerm;
+
+    const minorLoss = input.entranceLossCoefficient * finalVelocity ** 2 / (2 * GRAVITY);
+    const frictionLoss = headwaterDepth - controllingTailwaterDepth - minorLoss + invertDrop;
+
+    return {
+      controllingTailwaterDepth,
+      frictionLoss,
+      minorLoss,
+      headwaterDepth,
+      headwaterLevel: inletLevel + headwaterDepth,
+      belowValidityThreshold: false,
+    };
+  }
+
+  // Case 3: steep slope — simplified FHWA approximation (see doc comment above).
+  const velocityHead = fullFlowVelocity ** 2 / (2 * GRAVITY);
+  const frictionLoss = fullFrictionSlope * input.length;
+  const minorLoss = (input.entranceLossCoefficient + input.outletLossCoefficient) * velocityHead;
   const headwaterDepth = controllingTailwaterDepth + frictionLoss + minorLoss - invertDrop;
-  const barrelFlowingFull = input.tailwaterDepth >= height || solveNormalDepth(input) >= height * 0.999;
 
   return {
     controllingTailwaterDepth,
@@ -414,7 +493,7 @@ export function calculateOutletControl(input: CulvertInput): OutletControlResult
     minorLoss,
     headwaterDepth,
     headwaterLevel: inletLevel + headwaterDepth,
-    belowValidityThreshold: !barrelFlowingFull && headwaterDepth < height * 0.75,
+    belowValidityThreshold: headwaterDepth < height * 0.75,
   };
 }
 
@@ -461,7 +540,7 @@ export function calculateCulvert(input: CulvertInput): CulvertResult {
     warnings.push("Tailwater submerges the culvert outlet.");
   }
   if (outletControl.belowValidityThreshold) {
-    warnings.push("Outlet-control headwater is below 0.75x the culvert rise; the simplified outlet-control method may be inaccurate here and a full backwater profile would be needed for a precise result.");
+    warnings.push("This barrel is on a steep slope with a low outlet-control headwater; a hydraulic jump may form inside the barrel, which this simplified outlet-control energy approximation does not resolve exactly. Check the water-surface profile for a jump.");
   }
 
   return {
@@ -628,7 +707,7 @@ export interface CulvertProfileResult {
 
 const PROFILE_STATION_COUNT = 60;
 /** Fraction of the way to the branch boundary (critical depth or barrel rise) treated as "reached". */
-const PROFILE_BRANCH_MARGIN = 0.995;
+const PROFILE_BRANCH_MARGIN = 0.9995;
 const PROFILE_ENERGY_TOLERANCE = 1e-6;
 
 function froudeNumberAt(input: CulvertInput, depth: number, dischargePerBarrel: number): number {
@@ -662,13 +741,14 @@ export function traceStandardStepProfile(
   startDepth: number,
   direction: ProfileDirection,
   regime: FlowRegime,
+  stationCount: number = PROFILE_STATION_COUNT,
 ): WaterSurfaceProfile {
   const height = culvertHeight(input);
   const length = input.length;
   const inletLevel = input.inletInvertLevel ?? 0;
   const dischargePerBarrel = input.discharge / input.barrels;
   const criticalDepth = solveCriticalDepth(input);
-  const stepSize = length / PROFILE_STATION_COUNT;
+  const stepSize = length / stationCount;
   const signedStep = direction === "downstream" ? stepSize : -stepSize;
 
   const branchLower = regime === "supercritical" ? EPSILON : criticalDepth * (2 - PROFILE_BRANCH_MARGIN);
@@ -690,7 +770,7 @@ export function traceStandardStepProfile(
   const stations: ProfileStation[] = [stationAt(input, x, depth, dischargePerBarrel)];
   let reachedFull = false;
 
-  for (let index = 1; index <= PROFILE_STATION_COUNT; index += 1) {
+  for (let index = 1; index <= stationCount; index += 1) {
     const previousX = x;
     const previousDepth = depth;
     const nextX = direction === "downstream" ? previousX + stepSize : previousX - stepSize;
@@ -718,6 +798,16 @@ export function traceStandardStepProfile(
     if (regime === "subcritical" && depth >= branchUpper) {
       reachedFull = true;
       break;
+    }
+  }
+
+  if (reachedFull) {
+    // Extend the plotted line at crown depth across the remaining
+    // (pressurized) reach, rather than leaving the chart looking cut off
+    // partway through the barrel.
+    const domainEnd = direction === "downstream" ? length : 0;
+    if (Math.abs(x - domainEnd) > EPSILON) {
+      stations.push(stationAt(input, domainEnd, height, dischargePerBarrel));
     }
   }
 
@@ -785,8 +875,10 @@ export function traceCulvertProfile(input: CulvertInput): CulvertProfileResult {
   let note = "";
 
   if (calculation.governingControl === "outlet") {
-    if (calculation.outletControl.controllingTailwaterDepth >= height) {
+    if (input.tailwaterDepth >= height) {
       note = "The outlet-control depth reaches the culvert rise, so the barrel flows full near the outlet and no partial-flow water-surface profile applies there.";
+    } else if (input.discharge > calculation.fullFlowCapacity) {
+      note = "Design flow exceeds the barrel's full-flow capacity, so the barrel is effectively pressurized throughout and no partial-flow water-surface profile applies.";
     } else {
       profiles.push(traceStandardStepProfile(
         input, calculation.outletControl.controllingTailwaterDepth, "upstream", "subcritical",
