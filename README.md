@@ -11,9 +11,10 @@ A private, unified collection of browser-based civil engineering calculation and
 - **Rising Main** — calculates pipeline losses, surge pressure, thrust blocks and pump-sump cycling.
 - **GSDM PMP** — calculates short-duration PMP depths and credible-limit rainfall inputs for RORB.
 - **Spillway** — calculates weir flow, chute hydraulics, hydraulic-jump properties and USBR stilling-basin dimensions.
+- **Culvert** — calculates circular and rectangular culvert capacity, normal and critical depth, and outlet-control headwater and velocity checks. Preliminary hydraulic assessment only; not yet a certified replacement for the legacy Hidroalcun design software (inlet-control coefficient families, water-surface profiles and auto-sizing are not yet ported).
 - **Proposal Tool** — sends RFQ documents to the established proposal-analysis and document-generation service.
 
-All eight tools are available from the **All Tools** screen and the persistent left navigation.
+All nine tools are available from the **All Tools** screen and the persistent left navigation.
 
 ## Railway deployment
 

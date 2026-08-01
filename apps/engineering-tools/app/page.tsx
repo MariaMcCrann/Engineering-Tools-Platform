@@ -6,6 +6,7 @@ import { OverlandFlowTool } from "./OverlandFlowTool";
 import { RisingMainTool } from "./RisingMainTool";
 import { GsdmPmpTool } from "./GsdmPmpTool";
 import { SpillwayTool } from "./SpillwayTool";
+import { CulvertTool } from "./CulvertTool";
 
 type Peak = { key: string; description: string };
 type Row = {
@@ -151,7 +152,7 @@ function calculate(parsed: Parsed, peakKey: string): Result[] {
 
 const fmt = (n: number | null) => n === null ? "—" : n.toFixed(4);
 
-type ViewKey = "tools" | "rorb" | "channel" | "storage" | "overland" | "rising" | "gsdm" | "spillway" | "proposal";
+type ViewKey = "tools" | "rorb" | "channel" | "storage" | "overland" | "rising" | "gsdm" | "spillway" | "culvert" | "proposal";
 
 type ToolEntry = { view: Exclude<ViewKey, "tools">; icon: string; label: string; desc: string; disabled?: boolean };
 
@@ -181,6 +182,7 @@ const TOOL_CATEGORIES: { key: string; label: string; tools: ToolEntry[] }[] = [
       { view: "overland", icon: "OF", label: "Overland Flow", desc: "Road cross-section capacity and Manning flow checks." },
       { view: "rising", icon: "RM", label: "Rising Main", desc: "Pipe losses, surge pressure, thrust blocks and pump-sump cycling." },
       { view: "spillway", icon: "SP", label: "Spillway", desc: "Weir flow, chute hydraulics and stilling-basin checks." },
+      { view: "culvert", icon: "CV", label: "Culvert", desc: "Culvert capacity, depth, velocity and headwater checks." },
     ],
   },
 ];
@@ -286,7 +288,7 @@ export default function Home() {
               ))}
             </div>
           </>
-        ) : view === "channel" ? <><header className="hub-header"><span>Channel Flow</span></header><ChannelFlowTool/></> : view === "storage" ? <><header className="hub-header"><span>Stage Storage</span></header><StageStorageTool/></> : view === "overland" ? <><header className="hub-header"><span>Overland Flow</span></header><OverlandFlowTool/></> : view === "rising" ? <><header className="hub-header"><span>Rising Main</span></header><RisingMainTool/></> : view === "gsdm" ? <><header className="hub-header"><span>GSDM PMP</span></header><GsdmPmpTool/></> : view === "spillway" ? <><header className="hub-header"><span>Spillway</span></header><SpillwayTool/></> : view === "proposal" ? <><header className="hub-header"><span>Proposal Tool</span></header><ProposalTool/></> : <>
+        ) : view === "channel" ? <><header className="hub-header"><span>Channel Flow</span></header><ChannelFlowTool/></> : view === "storage" ? <><header className="hub-header"><span>Stage Storage</span></header><StageStorageTool/></> : view === "overland" ? <><header className="hub-header"><span>Overland Flow</span></header><OverlandFlowTool/></> : view === "rising" ? <><header className="hub-header"><span>Rising Main</span></header><RisingMainTool/></> : view === "gsdm" ? <><header className="hub-header"><span>GSDM PMP</span></header><GsdmPmpTool/></> : view === "spillway" ? <><header className="hub-header"><span>Spillway</span></header><SpillwayTool/></> : view === "culvert" ? <><header className="hub-header"><span>Culvert</span></header><CulvertTool/></> : view === "proposal" ? <><header className="hub-header"><span>Proposal Tool</span></header><ProposalTool/></> : <>
         <header className="top-tabs"><button className="selected">New Analysis</button><button disabled>Projects</button><button disabled>Model QA</button></header>
         <div className="content">
           <div className="title-row"><div><p className="eyebrow">RORB RESULTS PROCESSOR</p><h1>Median Flow Analysis</h1><p className="subtitle">Upload a RORB batch output to identify the 1-up median flow and critical duration.</p></div><span className="condition-pill">Existing Conditions</span></div>
