@@ -140,5 +140,7 @@ td small { color:#96a0ad; font-weight:400; }
 
 .spillway-input-error{margin:0 0 14px;padding:10px 12px;background:#fff0f0;border:1px solid #edc1c1;border-radius:7px;color:#943b3b;font-size:11px;line-height:1.45}.spillway-input-error strong{display:block;margin-bottom:4px}.spillway-input-error ul{margin:0;padding-left:17px}
 
+.nav-badge{margin-left:7px;padding:2px 6px;border-radius:99px;background:#fff1d6;color:#936313;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.03em;vertical-align:middle}
+.tool-badge{display:inline-block;margin:0 0 5px;padding:2px 7px;border-radius:99px;background:#fff1d6;color:#936313;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.03em;font-style:normal}
 .shape-selector{display:flex;gap:.75rem;margin-bottom:1rem}.shape-selector button{border:1px solid var(--line);border-radius:8px;background:#fff;padding:10px 16px;cursor:pointer;font-weight:700;color:#415872}.shape-selector button.selected{border-color:#365b91;background:#eef4fa;color:#2f4d74}
 .culvert-warnings{margin-top:14px;border-left:3px solid #bd7a16;background:#fff8e9;padding:12px 14px;border-radius:0 6px 6px 0}.culvert-warnings strong{display:block;color:#8a5c10;font-size:11px;text-transform:uppercase;letter-spacing:.04em}.culvert-warnings ul{margin:8px 0 0;padding-left:18px;font-size:12px;color:#6c5a34;line-height:1.5}

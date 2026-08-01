@@ -154,7 +154,7 @@ const fmt = (n: number | null) => n === null ? "—" : n.toFixed(4);
 
 type ViewKey = "tools" | "rorb" | "channel" | "storage" | "overland" | "rising" | "gsdm" | "spillway" | "culvert" | "proposal";
 
-type ToolEntry = { view: Exclude<ViewKey, "tools">; icon: string; label: string; desc: string; disabled?: boolean };
+type ToolEntry = { view: Exclude<ViewKey, "tools">; icon: string; label: string; desc: string; disabled?: boolean; badge?: string };
 
 const TOOL_CATEGORIES: { key: string; label: string; tools: ToolEntry[] }[] = [
   {
@@ -182,7 +182,7 @@ const TOOL_CATEGORIES: { key: string; label: string; tools: ToolEntry[] }[] = [
       { view: "overland", icon: "OF", label: "Overland Flow", desc: "Road cross-section capacity and Manning flow checks." },
       { view: "rising", icon: "RM", label: "Rising Main", desc: "Pipe losses, surge pressure, thrust blocks and pump-sump cycling." },
       { view: "spillway", icon: "SP", label: "Spillway", desc: "Weir flow, chute hydraulics and stilling-basin checks." },
-      { view: "culvert", icon: "CV", label: "Culvert", desc: "Culvert capacity, depth, velocity and headwater checks." },
+      { view: "culvert", icon: "CV", label: "Culvert", desc: "Culvert capacity, depth, velocity and headwater checks.", badge: "In progress" },
     ],
   },
 ];
@@ -244,6 +244,7 @@ export default function Home() {
                     title={t.disabled ? "Not ready for review" : undefined}
                   >
                     {t.label}
+                    {t.badge && <span className="nav-badge">{t.badge}</span>}
                   </button>
                 ))
               )}
@@ -278,7 +279,7 @@ export default function Home() {
                           title={t.disabled ? "Not ready for review" : undefined}
                         >
                           <span className="tool-icon">{t.icon}</span>
-                          <span><strong>{t.label}</strong><small>{t.desc}</small></span>
+                          <span><strong>{t.label}</strong>{t.badge && <em className="tool-badge">{t.badge}</em>}<small>{t.desc}</small></span>
                           <b>{t.disabled ? "Not ready" : "Open →"}</b>
                         </button>
                       ))}
