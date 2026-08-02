@@ -443,9 +443,16 @@ function ProfileChart({
               x1={xScale(jump.station)} y1={yScale(jumpBedElevation + jump.upstreamDepth)}
               x2={xScale(jump.station)} y2={yScale(jumpBedElevation + jump.downstreamDepth)}
             />
+            <line
+              className="profile-jump-leader"
+              x1={xScale(jump.station)} y1={yScale(invertAt(jump.station) + height)}
+              x2={xScale(jump.station)} y2={Math.max(yScale(invertAt(jump.station) + height) - 14, topPad - 6)}
+            />
             <text
               className="profile-jump-label"
-              x={xScale(jump.station) + 7} y={yScale(jumpBedElevation + jump.downstreamDepth) + 4}
+              textAnchor="middle"
+              x={xScale(jump.station)}
+              y={Math.max(yScale(invertAt(jump.station) + height) - 16, topPad - 8)}
             >
               Hydraulic jump
             </text>

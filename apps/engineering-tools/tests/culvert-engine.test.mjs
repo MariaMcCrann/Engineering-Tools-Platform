@@ -251,6 +251,21 @@ test("traceCulvertProfile finds a hydraulic jump on a steep, outlet-controlled b
   assert.ok(profile.hydraulicJump.station >= 0 && profile.hydraulicJump.station <= steepOutletControlled.length);
 });
 
+test("hydraulic jump station reflects the actual scenario instead of always landing at the barrel entrance", () => {
+  // Regression test: depthAtStation used to clamp to a stale/synthetic boundary
+  // depth whenever a march couldn't bracket a solution, which made findHydraulicJump
+  // report a false crossing right at x=0 for essentially every scenario.
+  const shortBarrel = { ...circular, diameter: 1.5, tailwaterDepth: 0.3, length: 30 };
+  const longerBarrel = { ...circular, diameter: 1.5, tailwaterDepth: 0.3, length: 45 };
+  const shortJump = traceCulvertProfile(shortBarrel).hydraulicJump;
+  const longerJump = traceCulvertProfile(longerBarrel).hydraulicJump;
+  assert.ok(shortJump !== null);
+  assert.ok(longerJump !== null);
+  assert.ok(shortJump.station > 0.01, "jump should not default to the barrel entrance");
+  assert.ok(longerJump.station > 0.01, "jump should not default to the barrel entrance");
+  assert.notEqual(shortJump.station, longerJump.station);
+});
+
 test("traceCulvertProfile traces only the supercritical branch under pure inlet control", () => {
   const inletControlled = { ...circular, slope: 0.08, tailwaterDepth: 0.2 };
   const calc = calculateCulvert(inletControlled);
