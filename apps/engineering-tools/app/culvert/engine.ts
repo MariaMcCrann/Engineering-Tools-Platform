@@ -700,6 +700,8 @@ export interface HydraulicJump {
 
 export interface CulvertProfileResult {
   slopeRegime: SlopeRegime;
+  normalDepth: number;
+  criticalDepth: number;
   profiles: WaterSurfaceProfile[];
   hydraulicJump: HydraulicJump | null;
   note: string;
@@ -900,7 +902,7 @@ export function traceCulvertProfile(input: CulvertInput): CulvertProfileResult {
     note = "No partial-flow profile applies to this case.";
   }
 
-  return { slopeRegime, profiles, hydraulicJump, note };
+  return { slopeRegime, normalDepth, criticalDepth, profiles, hydraulicJump, note };
 }
 
 // ---------------------------------------------------------------------------

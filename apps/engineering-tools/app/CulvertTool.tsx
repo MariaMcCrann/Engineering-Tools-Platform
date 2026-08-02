@@ -301,12 +301,17 @@ function HydrographTable({
 }
 
 const REGIME_LABELS: Record<WaterSurfaceProfile["regime"], string> = {
-  subcritical: "Subcritical (outlet-control side)",
-  supercritical: "Supercritical (inlet-control side)",
+  subcritical: "Subcritical",
+  supercritical: "Supercritical",
 };
 
+function waterMarkerPath(cx: number, cy: number, size = 7): string {
+  // A downward-pointing ▽ marker sitting on the water surface line.
+  return `M ${cx - size} ${cy - size} L ${cx + size} ${cy - size} L ${cx} ${cy + size} Z`;
+}
+
 function ProfileChart({
-  length, height, inletLevel, slope, profiles, jump,
+  length, height, inletLevel, slope, profiles, jump, normalDepth, criticalDepth, tailwaterDepth, governingHeadwaterLevel,
 }: {
   length: number;
   height: number;
@@ -314,58 +319,146 @@ function ProfileChart({
   slope: number;
   profiles: WaterSurfaceProfile[];
   jump: HydraulicJump | null;
+  normalDepth: number;
+  criticalDepth: number;
+  tailwaterDepth: number;
+  governingHeadwaterLevel: number;
 }) {
-  const width = 700;
-  const viewHeight = 260;
-  const pad = 28;
+  const width = 760;
+  const viewHeight = 320;
+  const leftPad = 92;
+  const rightPad = 92;
+  const topPad = 34;
+  const bottomPad = 26;
   const span = Math.max(length, 0.001);
   const outletLevel = inletLevel - slope * length;
+  const tailwaterLevel = outletLevel + tailwaterDepth;
+  const invertAt = (x: number) => inletLevel - slope * x;
 
   const elevations = [
     inletLevel, outletLevel, inletLevel + height, outletLevel + height,
+    invertAt(0) + criticalDepth, invertAt(length) + criticalDepth,
+    invertAt(0) + normalDepth, invertAt(length) + normalDepth,
+    tailwaterLevel, governingHeadwaterLevel,
     ...profiles.flatMap((profile) => profile.stations.map((station) => station.waterSurfaceElevation)),
   ];
-  const elevMin = Math.min(...elevations);
-  const elevMax = Math.max(...elevations);
+  const elevMin = Math.min(...elevations) - 0.08 * height;
+  const elevMax = Math.max(...elevations) + 0.08 * height;
   const elevRange = Math.max(elevMax - elevMin, 0.001);
 
-  const xScale = (x: number) => pad + (x / span) * (width - 2 * pad);
+  const plotWidth = width - leftPad - rightPad;
+  const xScale = (x: number) => leftPad + (x / span) * plotWidth;
   const yScale = (elevation: number) =>
-    (viewHeight - pad) - ((elevation - elevMin) / elevRange) * (viewHeight - 2 * pad);
+    (viewHeight - bottomPad) - ((elevation - elevMin) / elevRange) * (viewHeight - topPad - bottomPad);
 
-  const jumpBedElevation = jump ? inletLevel - slope * jump.station : 0;
+  const jumpBedElevation = jump ? invertAt(jump.station) : 0;
+  const midStation = (profile: WaterSurfaceProfile) => profile.stations[Math.floor(profile.stations.length / 2)];
 
   return (
     <div className="profile-chart">
       <svg viewBox={`0 0 ${width} ${viewHeight}`} preserveAspectRatio="xMidYMid meet">
-        <line
-          className="profile-invert"
-          x1={xScale(0)} y1={yScale(inletLevel)} x2={xScale(length)} y2={yScale(outletLevel)}
+        <defs>
+          <pattern id="culvert-ground-hatch" width="7" height="7" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
+            <rect x="0" y="0" width="7" height="7" className="profile-hatch-bg" />
+            <line x1="0" y1="0" x2="0" y2="7" className="profile-hatch-line" />
+          </pattern>
+        </defs>
+
+        <polygon
+          className="profile-ground"
+          points={`${leftPad},${yScale(invertAt(0))} ${width - rightPad},${yScale(invertAt(length))} ${width - rightPad},${viewHeight} ${leftPad},${viewHeight}`}
         />
+
+        <rect
+          className="profile-pool"
+          x={0} y={yScale(governingHeadwaterLevel)}
+          width={leftPad} height={Math.max(yScale(invertAt(0)) - yScale(governingHeadwaterLevel), 0)}
+        />
+        <line className="profile-waterline" x1={0} y1={yScale(governingHeadwaterLevel)} x2={leftPad} y2={yScale(governingHeadwaterLevel)} />
+        <path className="profile-water-marker" d={waterMarkerPath(leftPad - 12, yScale(governingHeadwaterLevel))} />
+        <text className="profile-pool-label" x={4} y={yScale(governingHeadwaterLevel) - 8}>
+          HW {format(governingHeadwaterLevel - inletLevel, 2)} m
+        </text>
+
+        <rect
+          className="profile-pool"
+          x={width - rightPad} y={yScale(tailwaterLevel)}
+          width={rightPad} height={Math.max(yScale(invertAt(length)) - yScale(tailwaterLevel), 0)}
+        />
+        <line className="profile-waterline" x1={width - rightPad} y1={yScale(tailwaterLevel)} x2={width} y2={yScale(tailwaterLevel)} />
+        <path className="profile-water-marker" d={waterMarkerPath(width - rightPad + 12, yScale(tailwaterLevel))} />
+        <text className="profile-pool-label" textAnchor="end" x={width - 4} y={yScale(tailwaterLevel) - 8}>
+          TW {format(tailwaterDepth, 2)} m
+        </text>
+
+        <line className="profile-endcap" x1={xScale(0)} y1={yScale(invertAt(0))} x2={xScale(0)} y2={yScale(invertAt(0) + height)} />
+        <line className="profile-endcap" x1={xScale(length)} y1={yScale(invertAt(length))} x2={xScale(length)} y2={yScale(invertAt(length) + height)} />
+
+        <line
+          className="profile-yc"
+          x1={xScale(0)} y1={yScale(invertAt(0) + criticalDepth)} x2={xScale(length)} y2={yScale(invertAt(length) + criticalDepth)}
+        />
+        <text className="profile-ref-label profile-yc-label" x={xScale(0) + 6} y={yScale(invertAt(0) + criticalDepth) - 5}>
+          Critical depth
+        </text>
+        <line
+          className="profile-yn"
+          x1={xScale(0)} y1={yScale(invertAt(0) + normalDepth)} x2={xScale(length)} y2={yScale(invertAt(length) + normalDepth)}
+        />
+        <text className="profile-ref-label profile-yn-label" x={xScale(0) + 6} y={yScale(invertAt(0) + normalDepth) - 5}>
+          Normal depth
+        </text>
+
+        <line className="profile-invert" x1={xScale(0)} y1={yScale(invertAt(0))} x2={xScale(length)} y2={yScale(invertAt(length))} />
         <line
           className="profile-crown"
-          x1={xScale(0)} y1={yScale(inletLevel + height)} x2={xScale(length)} y2={yScale(outletLevel + height)}
+          x1={xScale(0)} y1={yScale(invertAt(0) + height)} x2={xScale(length)} y2={yScale(invertAt(length) + height)}
         />
-        {profiles.map((profile) => (
-          <polyline
-            key={profile.direction + profile.regime}
-            className={`profile-line profile-${profile.regime}`}
-            points={profile.stations.map((s) => `${xScale(s.x)},${yScale(s.waterSurfaceElevation)}`).join(" ")}
-          />
-        ))}
+
+        {profiles.map((profile) => {
+          const mid = midStation(profile);
+          return (
+            <g key={profile.direction + profile.regime}>
+              <polyline
+                className={`profile-line profile-${profile.regime}`}
+                points={profile.stations.map((s) => `${xScale(s.x)},${yScale(s.waterSurfaceElevation)}`).join(" ")}
+              />
+              {mid && (
+                <text
+                  className={`profile-curve-label profile-${profile.regime}-label`}
+                  x={xScale(mid.x)} y={yScale(mid.waterSurfaceElevation) - 8}
+                  textAnchor="middle"
+                >
+                  {REGIME_LABELS[profile.regime]}
+                </text>
+              )}
+            </g>
+          );
+        })}
+
         {jump && (
-          <line
-            className="profile-jump"
-            x1={xScale(jump.station)} y1={yScale(jumpBedElevation)}
-            x2={xScale(jump.station)} y2={yScale(jumpBedElevation + height)}
-          />
+          <>
+            <line
+              className="profile-jump"
+              x1={xScale(jump.station)} y1={yScale(jumpBedElevation + jump.upstreamDepth)}
+              x2={xScale(jump.station)} y2={yScale(jumpBedElevation + jump.downstreamDepth)}
+            />
+            <text
+              className="profile-jump-label"
+              x={xScale(jump.station) + 7} y={yScale(jumpBedElevation + jump.downstreamDepth) + 4}
+            >
+              Hydraulic jump
+            </text>
+          </>
         )}
       </svg>
       <div className="profile-legend">
         {profiles.map((profile) => (
-          <span key={profile.regime}><i className={`profile-swatch ${profile.regime}`} />{REGIME_LABELS[profile.regime]}</span>
+          <span key={profile.regime}><i className={`profile-swatch ${profile.regime}`} />{REGIME_LABELS[profile.regime]} profile</span>
         ))}
         {jump && <span><i className="profile-swatch jump" />Hydraulic jump</span>}
+        <span><i className="profile-swatch normal" />Normal depth</span>
+        <span><i className="profile-swatch critical" />Critical depth</span>
       </div>
     </div>
   );
@@ -758,6 +851,10 @@ export function CulvertTool() {
                     slope={effectiveInput.slope}
                     profiles={profile.result.profiles}
                     jump={profile.result.hydraulicJump}
+                    normalDepth={profile.result.normalDepth}
+                    criticalDepth={profile.result.criticalDepth}
+                    tailwaterDepth={effectiveInput.tailwaterDepth}
+                    governingHeadwaterLevel={calculateCulvert(effectiveInput).governingHeadwaterLevel}
                   />
                 )}
                 {profile.result.hydraulicJump && (
