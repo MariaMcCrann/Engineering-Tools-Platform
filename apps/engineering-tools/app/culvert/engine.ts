@@ -453,13 +453,10 @@ export function calculateOutletControl(input: CulvertInput): OutletControlResult
     const profile = traceStandardStepProfile(
       input, controllingTailwaterDepth, "upstream", "subcritical", OUTLET_CONTROL_MARCH_STATIONS,
     );
-    // When reachedFull, traceStandardStepProfile appends a synthetic
-    // domain-boundary station at crown depth for display purposes — find
-    // the actual transition-to-pressurized station, not that display point.
-    const openChannelStations = profile.reachedFull
-      ? profile.stations.filter((station) => station.depth < height - EPSILON)
-      : profile.stations;
-    const last = openChannelStations[openChannelStations.length - 1];
+    // traceStandardStepProfile appends a synthetic domain-boundary station
+    // for display purposes when it hits a branch limit — use the actual
+    // last numerically-solved station instead.
+    const last = realStations(profile)[realStations(profile).length - 1];
     const finalVelocity = profile.reachedFull ? fullFlowVelocity : last.velocity;
     const entranceLossTerm = (1 + input.entranceLossCoefficient) * finalVelocity ** 2 / (2 * GRAVITY);
 
@@ -689,6 +686,20 @@ export interface WaterSurfaceProfile {
   regime: FlowRegime;
   stations: ProfileStation[];
   reachedFull: boolean;
+  /**
+   * True when marching stopped because the depth asymptotically approached
+   * critical depth (a real GVF limit, not a numerical failure) before
+   * reaching the domain boundary. When true (or reachedFull is true), the
+   * last station in `stations` is a synthetic extension to the domain
+   * boundary for display purposes, not a numerically-solved point — see
+   * `realStations()`.
+   */
+  reachedCritical: boolean;
+}
+
+/** The numerically-solved stations, excluding any synthetic boundary-extension point. */
+function realStations(profile: WaterSurfaceProfile): ProfileStation[] {
+  return (profile.reachedFull || profile.reachedCritical) ? profile.stations.slice(0, -1) : profile.stations;
 }
 
 export interface HydraulicJump {
@@ -710,7 +721,6 @@ export interface CulvertProfileResult {
 const PROFILE_STATION_COUNT = 60;
 /** Fraction of the way to the branch boundary (critical depth or barrel rise) treated as "reached". */
 const PROFILE_BRANCH_MARGIN = 0.9995;
-const PROFILE_ENERGY_TOLERANCE = 1e-6;
 
 function froudeNumberAt(input: CulvertInput, depth: number, dischargePerBarrel: number): number {
   const properties = sectionProperties(input, depth);
@@ -771,6 +781,8 @@ export function traceStandardStepProfile(
   let depth = Math.min(Math.max(startDepth, branchLower), branchUpper);
   const stations: ProfileStation[] = [stationAt(input, x, depth, dischargePerBarrel)];
   let reachedFull = false;
+  let reachedCritical = false;
+  const domainEnd = direction === "downstream" ? length : 0;
 
   for (let index = 1; index <= stationCount; index += 1) {
     const previousX = x;
@@ -786,13 +798,46 @@ export function traceStandardStepProfile(
       (signedStep / 2) * previousFrictionSlope -
       previousEnergy;
 
-    const nextDepth = bisect(residual, branchLower, branchUpper);
-    if (Math.abs(residual(nextDepth)) > PROFILE_ENERGY_TOLERANCE * Math.max(1, Math.abs(previousEnergy))) {
-      // No depth on this branch balances the energy equation over this reach
-      // (the assumed flow regime has broken down) — stop marching here.
+    const residualLower = residual(branchLower);
+    const residualUpper = residual(branchUpper);
+    if (!Number.isFinite(residualLower) || !Number.isFinite(residualUpper)) break;
+
+    if (Math.sign(residualLower) === Math.sign(residualUpper) && residualLower !== 0) {
+      // residual(y) increases monotonically with y on this branch (specific
+      // energy dominates), so no bracket here means the true depth lies
+      // outside [branchLower, branchUpper] — not that bisect() should fall
+      // back to an arbitrary endpoint. Handle both directions and both
+      // regimes explicitly instead of freezing the curve at whatever depth
+      // this station reached (which previously made hydraulic-jump
+      // detection compare against a stale value for the rest of the
+      // barrel). The synthetic boundary station appended here is for
+      // display purposes only — see realStations().
+      if (residualLower < 0) {
+        // Needs more depth than branchUpper allows.
+        if (regime === "subcritical") {
+          // Wants to exceed the crown: continue as pressurized pipe flow.
+          stations.push(stationAt(input, domainEnd, height, dischargePerBarrel));
+          reachedFull = true;
+        } else {
+          // Supercritical branch is capped at critical depth: the curve is
+          // decelerating toward critical depth from below.
+          stations.push(stationAt(input, domainEnd, criticalDepth, dischargePerBarrel));
+          reachedCritical = true;
+        }
+      } else if (regime === "subcritical") {
+        // Needs less depth than branchLower (critical depth) allows: the
+        // curve has asymptotically approached critical depth from above
+        // (true GVF behavior — it never actually reaches yc in finite
+        // distance).
+        stations.push(stationAt(input, domainEnd, criticalDepth, dischargePerBarrel));
+        reachedCritical = true;
+      }
+      // A supercritical branch wanting less than branchLower (~0) is a
+      // degenerate/dry case with no sensible extension — just stop.
       break;
     }
 
+    const nextDepth = bisect(residual, branchLower, branchUpper);
     x = nextX;
     depth = nextDepth;
     stations.push(stationAt(input, x, depth, dischargePerBarrel));
@@ -803,27 +848,26 @@ export function traceStandardStepProfile(
     }
   }
 
-  if (reachedFull) {
-    // Extend the plotted line at crown depth across the remaining
-    // (pressurized) reach, rather than leaving the chart looking cut off
-    // partway through the barrel.
-    const domainEnd = direction === "downstream" ? length : 0;
-    if (Math.abs(x - domainEnd) > EPSILON) {
-      stations.push(stationAt(input, domainEnd, height, dischargePerBarrel));
-    }
-  }
-
-  return { direction, regime, stations, reachedFull };
+  return { direction, regime, stations, reachedFull, reachedCritical };
 }
 
-function depthAtStation(profile: WaterSurfaceProfile, x: number): number {
-  const stations = profile.stations;
+/**
+ * Interpolates depth at `x` from a station list. In `strict` mode, `x`
+ * outside the list's actual range returns NaN instead of clamping to the
+ * nearest endpoint — used for hydraulic-jump detection, where comparing
+ * against a clamped/extrapolated value (rather than genuine computed data)
+ * previously produced false-positive jump locations right at a synthetic
+ * boundary station.
+ */
+function depthAtStation(stations: ProfileStation[], x: number, strict = false): number {
   if (stations.length === 0) return NaN;
   // Stations run in x-ascending or x-descending order depending on direction; normalize to ascending.
   const ascending = stations[0].x <= stations[stations.length - 1].x;
   const ordered = ascending ? stations : [...stations].reverse();
-  if (x <= ordered[0].x) return ordered[0].depth;
-  if (x >= ordered[ordered.length - 1].x) return ordered[ordered.length - 1].depth;
+  if (x <= ordered[0].x) return strict && x < ordered[0].x - EPSILON ? NaN : ordered[0].depth;
+  if (x >= ordered[ordered.length - 1].x) {
+    return strict && x > ordered[ordered.length - 1].x + EPSILON ? NaN : ordered[ordered.length - 1].depth;
+  }
   for (let i = 1; i < ordered.length; i += 1) {
     if (x <= ordered[i].x) {
       const a = ordered[i - 1];
@@ -844,10 +888,15 @@ function findHydraulicJump(
   supercritical: WaterSurfaceProfile,
   subcritical: WaterSurfaceProfile,
 ): HydraulicJump | null {
-  const stations = [...supercritical.stations].sort((a, b) => a.x - b.x);
+  // Only compare real, numerically-solved stations — synthetic boundary-extension
+  // points (added when a march asymptotically approaches yc or fills to the crown
+  // without bracketing) don't represent genuine computed depths, and comparing
+  // against one previously produced false jump crossings right at that boundary.
+  const stations = [...realStations(supercritical)].sort((a, b) => a.x - b.x);
+  const subcriticalReal = realStations(subcritical);
   for (const station of stations) {
     const conjugateDepth = station.depth * (0.5 * (Math.sqrt(1 + 8 * station.froudeNumber ** 2) - 1));
-    const subcriticalDepth = depthAtStation(subcritical, station.x);
+    const subcriticalDepth = depthAtStation(subcriticalReal, station.x, true);
     if (!Number.isFinite(subcriticalDepth)) continue;
     if (conjugateDepth >= subcriticalDepth) {
       return {
