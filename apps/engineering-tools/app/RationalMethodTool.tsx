@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 
 type DurationRow = {
   minutes: number;
@@ -41,11 +41,25 @@ export function RationalMethodTool() {
   const [areaUnit, setAreaUnit] = useState<"ha" | "km2">("ha");
   const [coefficientChoice, setCoefficientChoice] = useState("0.50");
   const [customCoefficient, setCustomCoefficient] = useState("0.50");
+  const [tcMethod, setTcMethod] = useState<"manual" | "kirpich" | "bransby">("manual");
+  const [manualTc, setManualTc] = useState("30");
+  const [flowPathLength, setFlowPathLength] = useState("500");
+  const [elevationFall, setElevationFall] = useState("10");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   const coefficient = Number(coefficientChoice === "custom" ? customCoefficient : coefficientChoice);
   const areaHa = Number(area) * (areaUnit === "km2" ? 100 : 1);
+  const lengthMetres = Number(flowPathLength);
+  const fallMetres = Number(elevationFall);
+  const slopeDecimal = fallMetres / lengthMetres;
+  const equalAreaSlope = slopeDecimal * 1000;
+  const tcMinutes = tcMethod === "manual"
+    ? Number(manualTc)
+    : tcMethod === "kirpich"
+      ? 0.01947 * lengthMetres ** 0.77 * slopeDecimal ** -0.385
+      : 91 * (lengthMetres / 1000) / (areaHa ** 0.1 * equalAreaSlope ** 0.2);
+  const validTc = Number.isFinite(tcMinutes) && tcMinutes > 0;
   const rainfallIntensity = Number(intensity);
   const flow = coefficient * rainfallIntensity * areaHa / 360;
   const validResult = [coefficient, rainfallIntensity, areaHa].every((value) => Number.isFinite(value) && value > 0) && coefficient <= 1;
@@ -55,6 +69,20 @@ export function RationalMethodTool() {
     [ifd, duration],
   );
 
+  const designFlows = useMemo(() => {
+    if (!selectedRow || !Number.isFinite(coefficient) || coefficient <= 0 || coefficient > 1 || !Number.isFinite(areaHa) || areaHa <= 0) return [];
+    return [
+      { event: "5-year", aep: "20%" },
+      { event: "10-year", aep: "10%" },
+      { event: "100-year", aep: "1%" },
+    ].flatMap((item) => {
+      const rowIntensity = selectedRow.intensities[item.aep];
+      if (!Number.isFinite(rowIntensity)) return [];
+      const q = coefficient * rowIntensity * areaHa / 360;
+      return [{ ...item, intensity: rowIntensity, q }];
+    });
+  }, [areaHa, coefficient, selectedRow]);
+
   const applyBomIntensity = (nextAep: string, nextDuration: number, data = ifd) => {
     const value = data?.durations.find((row) => row.minutes === nextDuration)?.intensities[nextAep];
     if (typeof value === "number" && Number.isFinite(value)) {
@@ -62,6 +90,19 @@ export function RationalMethodTool() {
       setIntensitySource("bom");
     }
   };
+
+  useEffect(() => {
+    if (!ifd || !validTc) return;
+    const nearest = ifd.durations.reduce((best, row) =>
+      Math.abs(row.minutes - tcMinutes) < Math.abs(best.minutes - tcMinutes) ? row : best,
+    );
+    setDuration(nearest.minutes);
+    const value = nearest.intensities[aep];
+    if (typeof value === "number" && Number.isFinite(value)) {
+      setIntensity(String(value));
+      setIntensitySource("bom");
+    }
+  }, [aep, ifd, tcMinutes, validTc]);
 
   const retrieveIfd = async (event: FormEvent) => {
     event.preventDefault();
@@ -85,6 +126,26 @@ export function RationalMethodTool() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const exportDesignFlows = () => {
+    if (!designFlows.length || !selectedRow) return;
+    const lines = [
+      "Nominal event,AEP,Adopted duration (min),Rainfall intensity (mm/h),Q max (m3/s),Q max (L/s)",
+      ...designFlows.map((row) => [
+        row.event,
+        row.aep,
+        selectedRow.minutes,
+        row.intensity,
+        row.q.toFixed(4),
+        (row.q * 1000).toFixed(1),
+      ].join(",")),
+    ];
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv" }));
+    link.download = "rational_method_design_flows.csv";
+    link.click();
+    URL.revokeObjectURL(link.href);
   };
 
   return (
@@ -174,6 +235,63 @@ export function RationalMethodTool() {
             </div>
             <p className="engine-note">Select the coefficient appropriate to the catchment surface and adopted design guidance. Typical values are prompts, not a substitute for project-specific judgement.</p>
           </section>
+
+          <section className="calc-card">
+            <div className="calc-card-title"><b>3</b><h2>Time of concentration</h2></div>
+            <div className="calc-fields">
+              <label className="calc-field">
+                <span>Calculation method</span>
+                <select value={tcMethod} onChange={(event) => setTcMethod(event.target.value as "manual" | "kirpich" | "bransby")}>
+                  <option value="manual">Manual entry</option>
+                  <option value="kirpich">Kirpich</option>
+                  <option value="bransby">Bransby–Williams</option>
+                </select>
+              </label>
+              {tcMethod === "manual" ? (
+                <label className="calc-field">
+                  <span>Time of concentration</span>
+                  <input type="number" min="0.1" step="any" value={manualTc} onChange={(event) => setManualTc(event.target.value)} />
+                  <i>min</i>
+                </label>
+              ) : (
+                <>
+                  <label className="calc-field">
+                    <span>Longest flow path</span>
+                    <input type="number" min="0.1" step="any" value={flowPathLength} onChange={(event) => setFlowPathLength(event.target.value)} />
+                    <i>m</i>
+                  </label>
+                  <label className="calc-field">
+                    <span>Elevation fall along flow path</span>
+                    <input type="number" min="0.01" step="any" value={elevationFall} onChange={(event) => setElevationFall(event.target.value)} />
+                    <i>m</i>
+                  </label>
+                </>
+              )}
+            </div>
+            {tcMethod !== "manual" && (
+              <div className="rational-equation">
+                <strong>{tcMethod === "kirpich" ? "Kirpich equation" : "Bransby–Williams equation"}</strong>
+                <span>
+                  {tcMethod === "kirpich"
+                    ? "tc = 0.01947 L⁰·⁷⁷ S⁻⁰·³⁸⁵, where L is in metres and S is fall/length."
+                    : "tc = 91 L / (A⁰·¹ Se⁰·²), where L is in kilometres, A is in hectares and Se is in m/km."}
+                </span>
+              </div>
+            )}
+            <div className={validTc ? "answer-note" : "error"}>
+              {validTc
+                ? `Calculated tc: ${tcMinutes.toFixed(1)} min.${ifd && selectedRow ? ` Closest standard BoM duration: ${selectedRow.label}.` : " Retrieve the BoM IFD data to select the closest standard duration."}`
+                : "Enter positive flow-path and elevation values to calculate tc."}
+            </div>
+            <p className="engine-note">
+              {tcMethod === "kirpich"
+                ? "Kirpich is a simple empirical estimate commonly used for small, relatively steep, channelised catchments."
+                : tcMethod === "bransby"
+                  ? "Bransby–Williams reuses the catchment area above and is a simple estimate for rural or natural catchments with a defined main flow path."
+                  : "Use manual entry where tc has been established from a more detailed travel-time assessment."}
+              {" "}The closest standard BoM duration is selected automatically; the storm-duration dropdown remains available for engineering review.
+            </p>
+          </section>
         </div>
 
         <aside className="calc-results">
@@ -186,6 +304,8 @@ export function RationalMethodTool() {
           <div className="metric"><span>Runoff coefficient, C</span><strong>{Number.isFinite(coefficient) ? coefficient.toFixed(2) : "—"}</strong></div>
           <div className="metric"><span>Rainfall intensity, I</span><strong>{rainfallIntensity > 0 ? `${rainfallIntensity} mm/h` : "—"}</strong></div>
           <div className="metric"><span>Catchment area, A</span><strong>{areaHa > 0 ? `${areaHa.toFixed(3)} ha` : "—"}</strong></div>
+          <div className="metric"><span>Time of concentration, tc</span><strong>{validTc ? `${tcMinutes.toFixed(1)} min` : "—"}</strong></div>
+          <div className="metric"><span>Adopted storm duration</span><strong>{ifd && selectedRow ? selectedRow.label : "—"}</strong></div>
           <div className="rational-equation">
             <strong>Q = C × I × A / 360</strong>
             <span>{validResult ? `Q = ${coefficient.toFixed(3)} × ${rainfallIntensity} × ${areaHa.toFixed(3)} / 360` : "Complete the required inputs to calculate Q."}</span>
@@ -195,6 +315,43 @@ export function RationalMethodTool() {
           <p className="ifd-caution">Check the geocoded location and nearest 0.025° BoM grid cell before using the result. The Rational Method also assumes a design duration appropriate to the catchment time of concentration.</p>
         </aside>
       </div>
+
+      <div className="results-head">
+        <div>
+          <p className="eyebrow">DESIGN FLOW SUMMARY</p>
+          <h2>Peak runoff by AEP</h2>
+        </div>
+        <button className="export" onClick={exportDesignFlows} disabled={!designFlows.length}>↓ Download CSV</button>
+      </div>
+      <section className="table-card">
+        <table>
+          <thead>
+            <tr>
+              <th>Nominal event</th>
+              <th>AEP</th>
+              <th>Adopted duration</th>
+              <th>BoM intensity</th>
+              <th>Q max</th>
+              <th>Q max</th>
+            </tr>
+          </thead>
+          <tbody>
+            {designFlows.length ? designFlows.map((row) => (
+              <tr key={row.aep}>
+                <td><strong>{row.event}</strong></td>
+                <td>{row.aep}</td>
+                <td>{selectedRow?.label ?? "—"}</td>
+                <td>{row.intensity.toFixed(2)} mm/h</td>
+                <td className="flow">{row.q.toFixed(row.q < 0.1 ? 4 : 3)} <small>m³/s</small></td>
+                <td>{(row.q * 1000).toFixed(1)} L/s</td>
+              </tr>
+            )) : (
+              <tr><td colSpan={6}>Retrieve the BoM IFD data and complete the catchment inputs to generate the design-flow table.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </section>
+      <p className="engine-note">The 5-, 10- and 100-year labels are nominal shorthand. The stated 20%, 10% and 1% AEP values are used in the calculations.</p>
     </div>
   );
 }
