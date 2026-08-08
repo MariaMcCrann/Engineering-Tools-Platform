@@ -5,6 +5,7 @@ import { ChannelFlowTool, ProposalTool, StageStorageTool } from "./EngineeringTo
 import { OverlandFlowTool } from "./OverlandFlowTool";
 import { RisingMainTool } from "./RisingMainTool";
 import { GsdmPmpTool } from "./GsdmPmpTool";
+import { RationalMethodTool } from "./RationalMethodTool";
 import { SpillwayTool } from "./SpillwayTool";
 import { CulvertTool } from "./CulvertTool";
 
@@ -152,7 +153,7 @@ function calculate(parsed: Parsed, peakKey: string): Result[] {
 
 const fmt = (n: number | null) => n === null ? "—" : n.toFixed(4);
 
-type ViewKey = "tools" | "rorb" | "channel" | "storage" | "overland" | "rising" | "gsdm" | "spillway" | "culvert" | "proposal" | "site-intelligence";
+type ViewKey = "tools" | "rorb" | "rational" | "channel" | "storage" | "overland" | "rising" | "gsdm" | "spillway" | "culvert" | "proposal" | "site-intelligence";
 
 type ToolEntry = { view: Exclude<ViewKey, "tools">; icon: string; label: string; desc: string; disabled?: boolean; badge?: string; externalUrl?: string };
 
@@ -176,6 +177,7 @@ const TOOL_CATEGORIES: { key: string; label: string; tools: ToolEntry[] }[] = [
     key: "hydrology",
     label: "Hydrology",
     tools: [
+      { view: "rational", icon: "RM", label: "Rational Method Runoff", desc: "Calculate peak runoff using site-specific BoM IFD rainfall intensities." },
       { view: "rorb", icon: "MF", label: "RORB Median Flow", desc: "Process temporal-pattern ensembles and identify critical flows." },
       { view: "storage", icon: "SS", label: "Stage Storage", desc: "Stage-storage calculations and outputs." },
       { view: "gsdm", icon: "GP", label: "GSDM PMP", desc: "Short-duration PMP estimates and RORB rainfall inputs." },
@@ -304,7 +306,7 @@ export default function Home() {
               ))}
             </div>
           </>
-        ) : view === "channel" ? <><header className="hub-header"><span>Channel Flow</span></header><ChannelFlowTool/></> : view === "storage" ? <><header className="hub-header"><span>Stage Storage</span></header><StageStorageTool/></> : view === "overland" ? <><header className="hub-header"><span>Overland Flow</span></header><OverlandFlowTool/></> : view === "rising" ? <><header className="hub-header"><span>Rising Main</span></header><RisingMainTool/></> : view === "gsdm" ? <><header className="hub-header"><span>GSDM PMP</span></header><GsdmPmpTool/></> : view === "spillway" ? <><header className="hub-header"><span>Spillway</span></header><SpillwayTool/></> : view === "culvert" ? <><header className="hub-header"><span>Culvert</span></header><CulvertTool/></> : view === "proposal" ? <><header className="hub-header"><span>Proposal Tool</span></header><ProposalTool/></> : <>
+        ) : view === "rational" ? <><header className="hub-header"><span>Rational Method Runoff</span></header><RationalMethodTool/></> : view === "channel" ? <><header className="hub-header"><span>Channel Flow</span></header><ChannelFlowTool/></> : view === "storage" ? <><header className="hub-header"><span>Stage Storage</span></header><StageStorageTool/></> : view === "overland" ? <><header className="hub-header"><span>Overland Flow</span></header><OverlandFlowTool/></> : view === "rising" ? <><header className="hub-header"><span>Rising Main</span></header><RisingMainTool/></> : view === "gsdm" ? <><header className="hub-header"><span>GSDM PMP</span></header><GsdmPmpTool/></> : view === "spillway" ? <><header className="hub-header"><span>Spillway</span></header><SpillwayTool/></> : view === "culvert" ? <><header className="hub-header"><span>Culvert</span></header><CulvertTool/></> : view === "proposal" ? <><header className="hub-header"><span>Proposal Tool</span></header><ProposalTool/></> : <>
         <header className="top-tabs"><button className="selected">New Analysis</button><button disabled>Projects</button><button disabled>Model QA</button></header>
         <div className="content">
           <div className="title-row"><div><p className="eyebrow">RORB RESULTS PROCESSOR</p><h1>Median Flow Analysis</h1><p className="subtitle">Upload a RORB batch output to identify the 1-up median flow and critical duration.</p></div><span className="condition-pill">Existing Conditions</span></div>
