@@ -10,6 +10,7 @@ import { SpillwayTool } from "./SpillwayTool";
 import { CulvertTool } from "./CulvertTool";
 import { HeadlossTool } from "./HeadlossTool";
 import { PipeSizingTool, PipelineHglTool } from "./pipeline-tools";
+import { RockProtectionTool } from "./RockProtectionTool";
 
 type Peak = { key: string; description: string };
 type Row = { run: number; duration: string; durationMinutes: number; aep: string; aepValue: number; temporalPattern: number | null; rain: number; arf: number; peaks: Record<string, number> };
@@ -71,7 +72,7 @@ function calculate(parsed: Parsed, peakKey: string): Result[] {
 }
 
 const fmt = (n: number | null) => n === null ? "—" : n.toFixed(4);
-type ViewKey = "tools" | "rorb" | "rational" | "channel" | "storage" | "overland" | "rising" | "gsdm" | "spillway" | "culvert" | "headloss" | "pipe-sizing" | "pipeline-hgl" | "proposal" | "site-intelligence";
+type ViewKey = "tools" | "rorb" | "rational" | "channel" | "storage" | "overland" | "rising" | "gsdm" | "spillway" | "culvert" | "headloss" | "pipe-sizing" | "pipeline-hgl" | "rock-protection" | "proposal" | "site-intelligence";
 type ToolEntry = { view: Exclude<ViewKey, "tools">; icon: string; label: string; desc: string; disabled?: boolean; badge?: string; externalUrl?: string };
 
 const TOOL_CATEGORIES: { key: string; label: string; tools: ToolEntry[] }[] = [
@@ -92,6 +93,7 @@ const TOOL_CATEGORIES: { key: string; label: string; tools: ToolEntry[] }[] = [
     { view: "headloss", icon: "HL", label: "Pipe Headloss", desc: "Colebrook–White friction, minor losses and HGL checks." },
     { view: "pipe-sizing", icon: "PS", label: "Pipe Sizing", desc: "Compare workbook pipe sizes against velocity and allowable headloss." },
     { view: "pipeline-hgl", icon: "HG", label: "Pipeline HGL", desc: "Multi-reach headloss and running hydraulic grade line." },
+    { view: "rock-protection", icon: "RP", label: "Rock Protection / Riprap", desc: "Preliminary D50 and culvert outlet apron sizing using HEC-14 guidance." },
     { view: "rising", icon: "RM", label: "Rising Main", desc: "Pipe losses, surge pressure, thrust blocks and pump-sump cycling." },
     { view: "spillway", icon: "SP", label: "Spillway", desc: "Weir flow, chute hydraulics and stilling-basin checks." },
     { view: "culvert", icon: "CV", label: "Culvert", desc: "Culvert capacity, depth, velocity and headwater checks.", badge: "In progress" },
@@ -114,6 +116,7 @@ export default function Home() {
     : view === "headloss" ? <><header className="hub-header"><span>Pipe Headloss</span></header><HeadlossTool/></>
     : view === "pipe-sizing" ? <><header className="hub-header"><span>Pipe Sizing</span></header><PipeSizingTool/></>
     : view === "pipeline-hgl" ? <><header className="hub-header"><span>Pipeline HGL</span></header><PipelineHglTool/></>
+    : view === "rock-protection" ? <><header className="hub-header"><span>Rock Protection / Riprap</span></header><RockProtectionTool/></>
     : view === "rising" ? <><header className="hub-header"><span>Rising Main</span></header><RisingMainTool/></>
     : view === "gsdm" ? <><header className="hub-header"><span>GSDM PMP</span></header><GsdmPmpTool/></>
     : view === "spillway" ? <><header className="hub-header"><span>Spillway</span></header><SpillwayTool/></>
