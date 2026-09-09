@@ -19,7 +19,7 @@ const fmt=(n:number,d=1)=>Number.isFinite(n)?n.toFixed(d):"—";
 type Check={label:string; demand:number; capacity:number; unit:string; pass:boolean};
 function sectionChecks(D:number,cover:number,db:number,spacing:number,mesh:string,meshDir:"pri"|"sec",fc:number,fsy:number,moment:number,serviceMoment:number,shrinkMu:number){
   const meshDb = meshDir==="pri" ? (MESH[mesh]?.pri??0) : (MESH[mesh]?.sec??0);
-  const effectiveDb = db>0 ? db : meshDb;
+  const effectiveDb = meshDb>0 ? meshDb : db;
   const d = Math.max(1,D-cover-effectiveDb/2);
   const Ast = area(db,spacing)+meshArea(mesh,meshDir);
   const alpha2=Math.max(0.67,0.85-0.0015*fc*0.9);
