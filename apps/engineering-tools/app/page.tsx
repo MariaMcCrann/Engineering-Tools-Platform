@@ -11,6 +11,7 @@ import { CulvertTool } from "./CulvertTool";
 import { HeadlossTool } from "./HeadlossTool";
 import { PipeSizingTool, PipelineHglTool } from "./pipeline-tools";
 import { RockProtectionTool } from "./RockProtectionTool";
+import { HeadwallStructuralTool, BaseSlabStructuralTool } from "./StructuralConcreteTools";
 
 type Peak = { key: string; description: string };
 type Row = { run: number; duration: string; durationMinutes: number; aep: string; aepValue: number; temporalPattern: number | null; rain: number; arf: number; peaks: Record<string, number> };
@@ -72,7 +73,7 @@ function calculate(parsed: Parsed, peakKey: string): Result[] {
 }
 
 const fmt = (n: number | null) => n === null ? "—" : n.toFixed(4);
-type ViewKey = "tools" | "rorb" | "rational" | "channel" | "storage" | "overland" | "rising" | "gsdm" | "spillway" | "culvert" | "headloss" | "pipe-sizing" | "pipeline-hgl" | "rock-protection" | "proposal" | "site-intelligence";
+type ViewKey = "tools" | "rorb" | "rational" | "channel" | "storage" | "overland" | "rising" | "gsdm" | "spillway" | "culvert" | "headloss" | "pipe-sizing" | "pipeline-hgl" | "rock-protection" | "headwall-concrete" | "base-slab-concrete" | "proposal" | "site-intelligence";
 type ToolEntry = { view: Exclude<ViewKey, "tools">; icon: string; label: string; desc: string; disabled?: boolean; badge?: string; externalUrl?: string };
 
 const TOOL_CATEGORIES: { key: string; label: string; tools: ToolEntry[] }[] = [
@@ -80,7 +81,10 @@ const TOOL_CATEGORIES: { key: string; label: string; tools: ToolEntry[] }[] = [
     { view: "site-intelligence", icon: "GIS", label: "Project Site Intelligence", desc: "Screen a Victorian site against planning, cadastral and waterway open data.", externalUrl: "https://siteintelligence.floodriskadvisory.com.au" },
     { view: "proposal", icon: "PT", label: "Proposal Tool", desc: "Prepare consistent consultancy proposals.", disabled: true },
   ]},
-  { key: "structures", label: "Structures", tools: [] },
+  { key: "structures", label: "Structures", tools: [
+    { view: "headwall-concrete", icon: "HW", label: "Headwall Concrete", desc: "AS 3600 headwall bending, minimum steel and shear screening checks." },
+    { view: "base-slab-concrete", icon: "BS", label: "Base Slab Concrete", desc: "AS 3600 reinforced base-slab design checks from the supplied workbook." },
+  ]},
   { key: "hydrology", label: "Hydrology", tools: [
     { view: "rational", icon: "RM", label: "Rational Method Runoff", desc: "Calculate peak runoff using site-specific BoM IFD rainfall intensities." },
     { view: "rorb", icon: "MF", label: "RORB Median Flow", desc: "Process temporal-pattern ensembles and identify critical flows." },
@@ -117,6 +121,8 @@ export default function Home() {
     : view === "pipe-sizing" ? <><header className="hub-header"><span>Pipe Sizing</span></header><PipeSizingTool/></>
     : view === "pipeline-hgl" ? <><header className="hub-header"><span>Pipeline HGL</span></header><PipelineHglTool/></>
     : view === "rock-protection" ? <><header className="hub-header"><span>Rock Protection / Riprap</span></header><RockProtectionTool/></>
+    : view === "headwall-concrete" ? <><header className="hub-header"><span>Headwall Concrete</span></header><HeadwallStructuralTool/></>
+    : view === "base-slab-concrete" ? <><header className="hub-header"><span>Base Slab Concrete</span></header><BaseSlabStructuralTool/></>
     : view === "rising" ? <><header className="hub-header"><span>Rising Main</span></header><RisingMainTool/></>
     : view === "gsdm" ? <><header className="hub-header"><span>GSDM PMP</span></header><GsdmPmpTool/></>
     : view === "spillway" ? <><header className="hub-header"><span>Spillway</span></header><SpillwayTool/></>
