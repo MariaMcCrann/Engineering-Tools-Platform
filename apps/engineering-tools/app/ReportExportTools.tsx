@@ -1,0 +1,17 @@
+"use client";
+
+import { useEffect, useState } from "react";
+
+const esc=(s:string)=>s.replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]||c));
+function reportHtml(){
+ const title=document.querySelector("h1")?.textContent?.trim()||"Engineering Calculation";
+ const subtitle=document.querySelector(".subtitle")?.textContent?.trim()||"";
+ const fields=[...document.querySelectorAll("label")].map(el=>{const input=el.querySelector("input,select") as HTMLInputElement|HTMLSelectElement|null;if(!input)return null;const label=(el.querySelector("span")?.textContent||el.childNodes[0]?.textContent||"").trim();return label?[label,input.value]:null}).filter(Boolean) as string[][];
+ const metrics=[...document.querySelectorAll(".metric,.model-strip>div")].map(el=>[(el.querySelector("span")?.textContent||"").trim(),(el.querySelector("strong")?.textContent||"").trim()]).filter(x=>x[0]);
+ const tables=[...document.querySelectorAll("table")].map(t=>t.outerHTML).join("");
+ const rows=(arr:string[][])=>arr.map(r=>`<tr>${r.map((x,i)=>`<${i?"td":"th"}>${esc(x)}</${i?"td":"th"}>`).join("")}</tr>`).join("");
+ return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title><style>@page{size:A4;margin:16mm}body{font:11px Arial;color:#24364d;margin:0}header{border-bottom:3px solid #365b91;padding-bottom:12px;margin-bottom:18px}h1{font-size:23px;margin:0;color:#263d5e}h2{font-size:13px;color:#365b91;margin:20px 0 7px}.sub{color:#718096;margin-top:5px}.meta{float:right;color:#718096}table{width:100%;border-collapse:collapse;margin:7px 0 15px;font-size:10px}th{background:#dbe8f5;color:#263d5e;text-align:left;font-weight:700}th,td{border:1px solid #9aa9ba;padding:6px 7px}tr:nth-child(even) td{background:#f7f9fb}.note{margin-top:20px;padding:9px;background:#eef7f2;border-left:3px solid #28755a;color:#365b50}@media print{button{display:none}}</style></head><body><header><span class="meta">${new Date().toLocaleDateString("en-AU")}</span><h1>${esc(title)}</h1><div class="sub">${esc(subtitle)}</div></header>${fields.length?`<h2>Design inputs</h2><table>${rows(fields)}</table>`:""}${metrics.length?`<h2>Results summary</h2><table>${rows(metrics)}</table>`:""}${tables?`<h2>Calculation tables</h2>${tables}`:""}<div class="note">Engineering Tools calculation report. Verify inputs, assumptions, governing standards and site-specific design requirements before issue.</div></body></html>`;
+}
+function exportPdf(){const w=window.open("","_blank","width=900,height=1100");if(!w)return;w.document.write(reportHtml());w.document.close();w.focus();setTimeout(()=>w.print(),250)}
+function exportExcel(){const html=reportHtml();const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([html],{type:"application/vnd.ms-excel"}));a.download=`${(document.querySelector("h1")?.textContent||"engineering-calculation").toLowerCase().replace(/[^a-z0-9]+/g,"-")}.xls`;a.click();URL.revokeObjectURL(a.href)}
+export default function ReportExportTools(){const [show,setShow]=useState(false);useEffect(()=>{const check=()=>setShow([...document.querySelectorAll("button")].some(b=>/csv/i.test(b.textContent||"")));check();const o=new MutationObserver(check);o.observe(document.body,{subtree:true,childList:true});return()=>o.disconnect()},[]);if(!show)return null;return <div className="report-export-tools"><button onClick={exportPdf}>↓ Export PDF</button><button onClick={exportExcel}>↓ Export Excel</button></div>}
