@@ -30,7 +30,25 @@ The Railway configuration runs a standard Next.js production build and binds the
 
 The proposal analysis remains a separate backend service. The environment variable allows its address to be changed without editing application code.
 
-## Local development
+## Request a New Tool email setup
+
+The dashboard posts to the Next.js server at `/api/tool-requests`, which sends a plain-text email through Resend to `maria.mccrann@floodriskadvisory.com.au`. Requests are no longer saved to localStorage. No existing email provider was configured in this repository.
+
+Before delivery works:
+
+1. Create a Resend account and verify a sending domain by adding its required DNS records. See https://resend.com/docs/dashboard/domains/introduction.
+2. Create a sending API key, preferably restricted to that domain.
+3. In the **Engineering Tools Railway service → Variables**, set `RESEND_API_KEY` to that secret and `TOOL_REQUEST_FROM_EMAIL` to a verified sender, for example `Engineering Tools <tools@floodriskadvisory.com.au>` after verifying that domain. The sender and recipient can differ. Do not use Resend's test sender for production delivery to arbitrary recipients.
+4. Redeploy the service with these variables. For local development put them in `apps/engineering-tools/.env.local`, which is gitignored. Never prefix either variable with `NEXT_PUBLIC_` or commit real credentials.
+5. Submit a distinctive request from the dashboard. Confirm “Request submitted”, then check Resend's delivery log and Maria's inbox/spam folder. The UI confirms provider acceptance, not guaranteed inbox delivery.
+
+The form preserves text on configuration, provider or network errors, disables submission while sending, and reuses an idempotency key for retries of unchanged text. Resend retains idempotency keys for 24 hours; closing/reloading the page starts a new submission. Old localStorage requests are not automatically sent.
+
+The server enforces same-origin JSON requests, a 24 KB body limit, a 5,000-character text limit, a 15-second provider timeout and a cap of 10 send attempts per minute per server instance. This cap resets on restart and is not a distributed abuse control; use an edge/WAF rate limit or shared limiter if deploying multiple replicas or experiencing spam. No authentication is implied by the origin check. Provider error details, request text and credentials are not returned to the browser or logged.
+
+Run the mocked route tests with `node --experimental-strip-types --test tests/tool-requests.test.mjs` from the app directory. They do not send real emails. Production deployment remains the documented Railway Next.js server; the separate experimental Worker entry point is not configured by these instructions.
+
+## Local development commands
 
 ```bash
 cd apps/engineering-tools
