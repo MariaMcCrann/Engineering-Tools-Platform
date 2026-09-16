@@ -97,6 +97,48 @@ function Metric({ name, value }: { name: string; value: string }) {
   return <div className="metric"><span>{name}</span><strong>{value}</strong></div>;
 }
 
+type CurveSample = { q: number; sysMax: number; sysMin: number; pump: number; power: number };
+function PumpCurveChart({ samples, dutyMax, dutyMin }: { samples: CurveSample[]; dutyMax: { q: number; h: number } | null; dutyMin: { q: number; h: number } | null }) {
+  if (!samples.length) return null;
+  const w = 620, h = 320, left = 55, right = 565, top = 20, bottom = 265;
+  const qMax = Math.max(...samples.map((s) => s.q)) * 1.05;
+  const headMax = Math.ceil(Math.max(...samples.map((s) => Math.max(s.sysMax, s.sysMin, s.pump))) / 10) * 10 + 10;
+  const powerMax = Math.ceil(Math.max(...samples.map((s) => s.power), 1) / 5) * 5 + 5;
+  const x = (q: number) => left + (q / qMax) * (right - left);
+  const yHead = (v: number) => bottom - (v / headMax) * (bottom - top);
+  const yPower = (v: number) => bottom - (v / powerMax) * (bottom - top);
+  const path = (values: number[], scaleY: (v: number) => number) => samples.map((s, i) => `${i === 0 ? "M" : "L"}${x(s.q)} ${scaleY(values[i])}`).join(" ");
+  const gridlinesY = [0, 0.25, 0.5, 0.75, 1].map((f) => top + f * (bottom - top));
+
+  return <div className="cross-section pump-curve-chart">
+    <h3>SYSTEM AND PUMP CURVES</h3>
+    <svg viewBox={`0 0 ${w} ${h}`} role="img" aria-label="System and pump curves chart, head versus flow rate, with power on a secondary axis">
+      {gridlinesY.map((gy) => <line key={gy} x1={left} y1={gy} x2={right} y2={gy} stroke="#e2e8f0" strokeWidth="1" />)}
+      <line x1={left} y1={top} x2={left} y2={bottom} stroke="#34495e" strokeWidth="1.5" />
+      <line x1={right} y1={top} x2={right} y2={bottom} stroke="#34495e" strokeWidth="1.5" />
+      <line x1={left} y1={bottom} x2={right} y2={bottom} stroke="#34495e" strokeWidth="1.5" />
+      {[0, 0.25, 0.5, 0.75, 1].map((f) => <text key={"hl" + f} x={left - 8} y={bottom - f * (bottom - top) + 4} fontSize="10" textAnchor="end" fill="#34495e">{Math.round(f * headMax)}</text>)}
+      {[0, 0.25, 0.5, 0.75, 1].map((f) => <text key={"pl" + f} x={right + 8} y={bottom - f * (bottom - top) + 4} fontSize="10" fill="#2f7d4f">{Math.round(f * powerMax)}</text>)}
+      {samples.filter((_, i) => i % 2 === 0).map((s) => <text key={s.q} x={x(s.q)} y={bottom + 16} fontSize="10" textAnchor="middle" fill="#34495e">{s.q}</text>)}
+      <text x={(left + right) / 2} y={bottom + 32} fontSize="11" textAnchor="middle" fill="#24364d">Flow rate (L/s)</text>
+      <text x={left - 40} y={top - 6} fontSize="10" fill="#24364d">Head (m)</text>
+      <text x={right - 20} y={top - 6} fontSize="10" fill="#2f7d4f">Power (kW)</text>
+      <path d={path(samples.map((s) => s.sysMax), yHead)} fill="none" stroke="#b91c1c" strokeWidth="2" />
+      <path d={path(samples.map((s) => s.sysMin), yHead)} fill="none" stroke="#2786c2" strokeWidth="2" />
+      <path d={path(samples.map((s) => s.pump), yHead)} fill="none" stroke="#7c3aed" strokeWidth="2.5" />
+      <path d={path(samples.map((s) => s.power), yPower)} fill="none" stroke="#2f7d4f" strokeWidth="2" />
+      {dutyMax && <><circle cx={x(dutyMax.q)} cy={yHead(dutyMax.h)} r="4" fill="#7c3aed" /><text x={x(dutyMax.q) + 8} y={yHead(dutyMax.h) - 8} fontSize="10" fill="#7c3aed">{fmt(dutyMax.q, 0)} L/s, {fmt(dutyMax.h, 0)} m</text></>}
+      {dutyMin && <><circle cx={x(dutyMin.q)} cy={yHead(dutyMin.h)} r="4" fill="#7c3aed" /><text x={x(dutyMin.q) + 8} y={yHead(dutyMin.h) - 8} fontSize="10" fill="#7c3aed">{fmt(dutyMin.q, 0)} L/s, {fmt(dutyMin.h, 0)} m</text></>}
+    </svg>
+    <div className="chart-legend">
+      <span><i style={{ background: "#7c3aed" }} /> Pump curve</span>
+      <span><i style={{ background: "#b91c1c" }} /> Max system curve</span>
+      <span><i style={{ background: "#2786c2" }} /> Min system curve</span>
+      <span><i style={{ background: "#2f7d4f" }} /> Power</span>
+    </div>
+  </div>;
+}
+
 export function PumpDutyPointTool() {
   const [diameter, setDiameter] = useState("288.8");
   const [length, setLength] = useState("2835");
@@ -175,9 +217,10 @@ export function PumpDutyPointTool() {
     const atmPressureM = (101.3 * 1000) / 9.8 / rho;
     const npsha = (q: number) => atmPressureM + staticHeadMin - vapourPressureM - frictionHeadLoss(sL, sD, ksMax, q, viscosityMax) - sumKSuction * velocityHead(sD, q);
 
-    const curveSamples = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120].map((q) => ({
-      q, sysMax: systemHeadMax(q), sysMin: systemHeadMin(q), pump: pumpHead(q)
-    }));
+    const curveSamples = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120].map((q) => {
+      const pumpH = pumpHead(q);
+      return { q, sysMax: systemHeadMax(q), sysMin: systemHeadMin(q), pump: pumpH, power: power(q, pumpH) };
+    });
 
     return {
       sumK, staticHeadMin, staticHeadMax, viscosityMin, viscosityMax, speedRatio,
@@ -289,6 +332,7 @@ export function PumpDutyPointTool() {
       <Metric name="Sum of fitting loss factors, ΣK" value={fmt(r.sumK, 3)} />
       <Metric name="Static head, min / max" value={fmt(r.staticHeadMin, 2) + " m / " + fmt(r.staticHeadMax, 2) + " m"} />
       <Metric name="Speed ratio" value={fmt(r.speedRatio, 3)} />
+      <PumpCurveChart samples={r.curveSamples} dutyMax={r.dutyFlowMaxCase !== null && r.dutyHeadMaxCase !== null ? { q: r.dutyFlowMaxCase, h: r.dutyHeadMaxCase } : null} dutyMin={r.dutyFlowMinCase !== null && r.dutyHeadMinCase !== null ? { q: r.dutyFlowMinCase, h: r.dutyHeadMinCase } : null} />
       <div className="stage-table-wrap"><table className="stage-table"><thead><tr><th>Flow (L/s)</th><th>Sys. max (m)</th><th>Sys. min (m)</th><th>Pump (m)</th></tr></thead><tbody>{r.curveSamples.map((s) => <tr key={s.q}><td>{s.q}</td><td>{fmt(s.sysMax, 1)}</td><td>{fmt(s.sysMin, 1)}</td><td>{fmt(s.pump, 1)}</td></tr>)}</tbody></table></div>
       <button className="download-btn" onClick={exportCsv}>↓ Export calculation CSV</button>
       <p className="engine-note">Preliminary design aid only. Friction loss uses the Colebrook-White equation. Confirm pump curve, roughness, levels and NPSH margin against manufacturer data before issue.</p></>}
