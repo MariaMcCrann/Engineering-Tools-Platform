@@ -21,10 +21,11 @@ import { VNotchWeirTool } from "./VNotchWeirTool";
 import { PitSurgeTool } from "./PitSurgeTool";
 import { PumpDutyPointTool } from "./PumpDutyPointTool";
 import { CantileverWallTool } from "./CantileverWallTool";
+import { SedimentPondTool } from "./SedimentPondTool";
 import { EngineeringDashboard, DashboardCategory, DashboardTool, HANDBOOK_ITEMS } from "./EngineeringDashboard";
 import { SavedProjectsPanel, SaveProjectControl, CalculationTemplatesPanel, SavedProject, loadSavedProjects, persistSavedProjects } from "./WorkspacePanels";
 
-type ViewKey = "tools" | "saved-projects" | "templates" | "rorb" | "rational" | "channel" | "storage" | "overland" | "rising" | "gsdm" | "spillway" | "culvert" | "headloss" | "pipe-sizing" | "pipeline-hgl" | "rock-protection" | "headwall-concrete" | "base-slab-concrete" | "broad-crested-weir" | "drowned-sluice-gate" | "thrust-at-bends" | "buried-flexible-pipe" | "v-notch-weir" | "pit-surge" | "pump-duty-point" | "cantilever-wall" | "proposal" | "site-intelligence";
+type ViewKey = "tools" | "saved-projects" | "templates" | "rorb" | "rational" | "channel" | "storage" | "overland" | "rising" | "gsdm" | "spillway" | "culvert" | "headloss" | "pipe-sizing" | "pipeline-hgl" | "rock-protection" | "headwall-concrete" | "base-slab-concrete" | "broad-crested-weir" | "drowned-sluice-gate" | "thrust-at-bends" | "buried-flexible-pipe" | "v-notch-weir" | "pit-surge" | "pump-duty-point" | "cantilever-wall" | "sediment-pond" | "proposal" | "site-intelligence";
 type ToolEntry = DashboardTool & { view: Exclude<ViewKey, "tools" | "saved-projects" | "templates"> };
 
 const TOOL_CATEGORIES: DashboardCategory[] = [
@@ -32,6 +33,7 @@ const TOOL_CATEGORIES: DashboardCategory[] = [
     { view: "rational", icon: "RM", label: "Rational Method Runoff", desc: "Calculate peak runoff using site-specific BoM IFD rainfall intensities." },
     { view: "rorb", icon: "MF", label: "RORB Median Flow", desc: "Process temporal-pattern ensembles and identify critical flows." },
     { view: "gsdm", icon: "GP", label: "GSDM PMP", desc: "Short-duration PMP estimates and RORB rainfall inputs." },
+    { view: "sediment-pond", icon: "SD", label: "Sediment Pond Sizing", desc: "Fair & Geyer removal efficiency, basin stage-storage, cleanout and dewatering." },
   ]},
   { key: "hydraulics", label: "Hydraulics", description: "Channels, culverts, pipes, overland flow and scour.", icon: "≋", tools: [
     { view: "channel", icon: "CF", label: "Channel Flow", desc: "Trapezoidal channel flow calculations." },
@@ -127,6 +129,7 @@ export default function Home() {
     : view === "pit-surge" ? <>{toolHeader("Pit Surge", "pit-surge")}<PitSurgeTool/></>
     : view === "pump-duty-point" ? <>{toolHeader("Pump Duty Point", "pump-duty-point")}<PumpDutyPointTool/></>
     : view === "cantilever-wall" ? <>{toolHeader("Cantilever Wall", "cantilever-wall")}<CantileverWallTool/></>
+    : view === "sediment-pond" ? <>{toolHeader("Sediment Pond Sizing", "sediment-pond")}<SedimentPondTool/></>
     : view === "proposal" ? <>{toolHeader("Proposal Tool", "proposal")}<ProposalTool/></> : null;
 
   return <main className="app-shell">
