@@ -22,10 +22,11 @@ import { PitSurgeTool } from "./PitSurgeTool";
 import { PumpDutyPointTool } from "./PumpDutyPointTool";
 import { CantileverWallTool } from "./CantileverWallTool";
 import { SedimentPondTool } from "./SedimentPondTool";
+import { RegulatorDesignTool } from "./RegulatorDesignTool";
 import { EngineeringDashboard, DashboardCategory, DashboardTool, HANDBOOK_ITEMS } from "./EngineeringDashboard";
 import { SavedProjectsPanel, SaveProjectControl, CalculationTemplatesPanel, SavedProject, loadSavedProjects, persistSavedProjects } from "./WorkspacePanels";
 
-type ViewKey = "tools" | "saved-projects" | "templates" | "rorb" | "rational" | "channel" | "storage" | "overland" | "rising" | "gsdm" | "spillway" | "culvert" | "headloss" | "pipe-sizing" | "pipeline-hgl" | "rock-protection" | "headwall-concrete" | "base-slab-concrete" | "broad-crested-weir" | "drowned-sluice-gate" | "thrust-at-bends" | "buried-flexible-pipe" | "v-notch-weir" | "pit-surge" | "pump-duty-point" | "cantilever-wall" | "sediment-pond" | "proposal" | "site-intelligence";
+type ViewKey = "tools" | "saved-projects" | "templates" | "rorb" | "rational" | "channel" | "storage" | "overland" | "rising" | "gsdm" | "spillway" | "culvert" | "headloss" | "pipe-sizing" | "pipeline-hgl" | "rock-protection" | "headwall-concrete" | "base-slab-concrete" | "broad-crested-weir" | "drowned-sluice-gate" | "thrust-at-bends" | "buried-flexible-pipe" | "v-notch-weir" | "pit-surge" | "pump-duty-point" | "cantilever-wall" | "sediment-pond" | "regulator-design" | "proposal" | "site-intelligence";
 type ToolEntry = DashboardTool & { view: Exclude<ViewKey, "tools" | "saved-projects" | "templates"> };
 
 const TOOL_CATEGORIES: DashboardCategory[] = [
@@ -50,6 +51,7 @@ const TOOL_CATEGORIES: DashboardCategory[] = [
     { view: "v-notch-weir", icon: "VN", label: "V-Notch Weir", desc: "Discharge over a 90° V-notch thin plate weir — AS3778.4.1 and Ackers & White." },
     { view: "pit-surge", icon: "PG", label: "Pit Surge", desc: "Transient pit water level and siphon outflow response to pump inflow." },
     { view: "pump-duty-point", icon: "DP", label: "Pump Duty Point", desc: "Rising main system curves intersected with a pump curve — duty point, power and NPSHA." },
+    { view: "regulator-design", icon: "RG", label: "Regulator Design", desc: "FlumeGate flow capacity, precast structure geometry and seepage checks for a channel regulator." },
   ]},
   { key: "structures", label: "Structures", description: "Concrete headwalls, slabs and structural checks.", icon: "▥", tools: [
     { view: "headwall-concrete", icon: "HW", label: "Headwall Concrete", desc: "AS 3600 headwall bending, minimum steel and shear screening checks." },
@@ -130,6 +132,7 @@ export default function Home() {
     : view === "pump-duty-point" ? <>{toolHeader("Pump Duty Point", "pump-duty-point")}<PumpDutyPointTool/></>
     : view === "cantilever-wall" ? <>{toolHeader("Cantilever Wall", "cantilever-wall")}<CantileverWallTool/></>
     : view === "sediment-pond" ? <>{toolHeader("Sediment Pond Sizing", "sediment-pond")}<SedimentPondTool/></>
+    : view === "regulator-design" ? <>{toolHeader("Regulator Design", "regulator-design")}<RegulatorDesignTool/></>
     : view === "proposal" ? <>{toolHeader("Proposal Tool", "proposal")}<ProposalTool/></> : null;
 
   return <main className="app-shell">
