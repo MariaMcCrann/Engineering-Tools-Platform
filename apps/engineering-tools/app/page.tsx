@@ -18,10 +18,11 @@ import { DrownedSluiceGateTool } from "./DrownedSluiceGateTool";
 import { ThrustAtBendsTool } from "./ThrustAtBendsTool";
 import { BuriedFlexiblePipeTool } from "./BuriedFlexiblePipeTool";
 import { VNotchWeirTool } from "./VNotchWeirTool";
+import { PitSurgeTool } from "./PitSurgeTool";
 import { EngineeringDashboard, DashboardCategory, DashboardTool, HANDBOOK_ITEMS } from "./EngineeringDashboard";
 import { SavedProjectsPanel, SaveProjectControl, CalculationTemplatesPanel, SavedProject, loadSavedProjects, persistSavedProjects } from "./WorkspacePanels";
 
-type ViewKey = "tools" | "saved-projects" | "templates" | "rorb" | "rational" | "channel" | "storage" | "overland" | "rising" | "gsdm" | "spillway" | "culvert" | "headloss" | "pipe-sizing" | "pipeline-hgl" | "rock-protection" | "headwall-concrete" | "base-slab-concrete" | "broad-crested-weir" | "drowned-sluice-gate" | "thrust-at-bends" | "buried-flexible-pipe" | "v-notch-weir" | "proposal" | "site-intelligence";
+type ViewKey = "tools" | "saved-projects" | "templates" | "rorb" | "rational" | "channel" | "storage" | "overland" | "rising" | "gsdm" | "spillway" | "culvert" | "headloss" | "pipe-sizing" | "pipeline-hgl" | "rock-protection" | "headwall-concrete" | "base-slab-concrete" | "broad-crested-weir" | "drowned-sluice-gate" | "thrust-at-bends" | "buried-flexible-pipe" | "v-notch-weir" | "pit-surge" | "proposal" | "site-intelligence";
 type ToolEntry = DashboardTool & { view: Exclude<ViewKey, "tools" | "saved-projects" | "templates"> };
 
 const TOOL_CATEGORIES: DashboardCategory[] = [
@@ -44,6 +45,7 @@ const TOOL_CATEGORIES: DashboardCategory[] = [
     { view: "drowned-sluice-gate", icon: "SG", label: "Drowned Sluice Gate", desc: "Discharge rate through a drowned sluice gate for free flow." },
     { view: "thrust-at-bends", icon: "TB", label: "Thrust at Bends", desc: "Momentum and pressure thrust for anchorage design at pipeline bends." },
     { view: "v-notch-weir", icon: "VN", label: "V-Notch Weir", desc: "Discharge over a 90° V-notch thin plate weir — AS3778.4.1 and Ackers & White." },
+    { view: "pit-surge", icon: "PG", label: "Pit Surge", desc: "Transient pit water level and siphon outflow response to pump inflow." },
   ]},
   { key: "structures", label: "Structures", description: "Concrete headwalls, slabs and structural checks.", icon: "▥", tools: [
     { view: "headwall-concrete", icon: "HW", label: "Headwall Concrete", desc: "AS 3600 headwall bending, minimum steel and shear screening checks." },
@@ -116,6 +118,7 @@ export default function Home() {
     : view === "thrust-at-bends" ? <>{toolHeader("Thrust at Bends", "thrust-at-bends")}<ThrustAtBendsTool/></>
     : view === "buried-flexible-pipe" ? <>{toolHeader("Buried Flexible Pipe", "buried-flexible-pipe")}<BuriedFlexiblePipeTool/></>
     : view === "v-notch-weir" ? <>{toolHeader("V-Notch Weir", "v-notch-weir")}<VNotchWeirTool/></>
+    : view === "pit-surge" ? <>{toolHeader("Pit Surge", "pit-surge")}<PitSurgeTool/></>
     : view === "proposal" ? <>{toolHeader("Proposal Tool", "proposal")}<ProposalTool/></> : null;
 
   return <main className="app-shell">
