@@ -41,7 +41,7 @@ const TOOL_CATEGORIES: DashboardCategory[] = [
     { view: "headloss", icon: "HL", label: "Pipe Headloss", desc: "Colebrook–White friction, minor losses and HGL checks." },
     { view: "pipe-sizing", icon: "PS", label: "Pipe Sizing", desc: "Compare workbook pipe sizes against velocity and allowable headloss." },
     { view: "pipeline-hgl", icon: "HG", label: "Pipeline HGL", desc: "Multi-reach headloss and running hydraulic grade line." },
-    { view: "rock-protection", icon: "RP", label: "Rock Protection / Riprap", desc: "Preliminary D50 and culvert outlet apron sizing using HEC-14 guidance." },
+    { view: "rock-protection", icon: "RP", label: "Rock Protection / Riprap", desc: "Preliminary D50 and culvert outlet apron sizing using Austroads Guide to Road Design Part 5B." },
     { view: "rising", icon: "RM", label: "Rising Main", desc: "Pipe losses, surge pressure, thrust blocks and pump-sump cycling." },
     { view: "spillway", icon: "SP", label: "Spillway", desc: "Weir flow, chute hydraulics and stilling-basin checks." },
     { view: "broad-crested-weir", icon: "BW", label: "Broad Crested Weir", desc: "Open channel discharge via a broad crested weir, per AS3778.4.2." },
