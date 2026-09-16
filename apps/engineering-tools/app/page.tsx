@@ -35,7 +35,7 @@ const TOOL_CATEGORIES: DashboardCategory[] = [
   { key: "hydraulics", label: "Hydraulics", description: "Channels, culverts, pipes, overland flow and scour.", icon: "≋", tools: [
     { view: "channel", icon: "CF", label: "Channel Flow", desc: "Trapezoidal channel flow calculations." },
     { view: "overland", icon: "OF", label: "Overland Flow", desc: "Road cross-section capacity and Manning flow checks." },
-    { view: "culvert", icon: "CV", label: "Culvert", desc: "Culvert capacity, depth, velocity and headwater checks.", badge: "In progress" },
+    { view: "culvert", icon: "CV", label: "Culvert", desc: "Culvert capacity, depth, velocity and headwater checks." },
     { view: "headloss", icon: "HL", label: "Pipe Headloss", desc: "Colebrook–White friction, minor losses and HGL checks." },
     { view: "pipe-sizing", icon: "PS", label: "Pipe Sizing", desc: "Compare workbook pipe sizes against velocity and allowable headloss." },
     { view: "pipeline-hgl", icon: "HG", label: "Pipeline HGL", desc: "Multi-reach headloss and running hydraulic grade line." },
@@ -72,6 +72,8 @@ export default function Home() {
   const [view, setView] = useState<ViewKey>("tools");
   const [showHandbook, setShowHandbook] = useState(false);
   const [savedProjects, setSavedProjects] = useState<SavedProject[]>([]);
+  const [dashboardKey, setDashboardKey] = useState(0);
+  const goHome = () => { setView("tools"); setDashboardKey((k) => k + 1); };
 
   useEffect(() => { setSavedProjects(loadSavedProjects()); }, []);
 
@@ -128,22 +130,22 @@ export default function Home() {
     <aside className="sidebar dashboard-nav">
       <div className="brand"><img className="personal-mark" src="/brand-mark.svg" alt=""/><span className="brand-text"><strong>FLOOD RISK<br/>ADVISORY</strong><small>Engineering Tools</small></span></div>
       <nav className="tool-nav">
-        <button className={view === "tools" ? "nav-selected" : ""} onClick={() => setView("tools")}>⌂ &nbsp; Home</button>
-        <button onClick={() => setView("tools")}>▦ &nbsp; All Tools</button>
-        <button onClick={() => setView("tools")}>▦ &nbsp; Categories</button>
-        <button onClick={() => setView("tools")}>☆ &nbsp; Favourites</button>
-        <button onClick={() => setView("tools")}>◷ &nbsp; Recently Used</button>
+        <button className={view === "tools" ? "nav-selected" : ""} onClick={goHome}>⌂ &nbsp; Home</button>
+        <button onClick={goHome}>▦ &nbsp; All Tools</button>
+        <button onClick={goHome}>▦ &nbsp; Categories</button>
+        <button onClick={goHome}>☆ &nbsp; Favourites</button>
+        <button onClick={goHome}>◷ &nbsp; Recently Used</button>
         <div className="nav-divider"/>
         <button className={view === "saved-projects" ? "nav-selected" : ""} onClick={() => setView("saved-projects")}>▢ &nbsp; Saved Projects</button>
         <button className={view === "templates" ? "nav-selected" : ""} onClick={() => setView("templates")}>▤ &nbsp; Calculation Templates</button>
         <button onClick={() => setShowHandbook(true)}>▤ &nbsp; Source Documents</button>
         <div className="nav-divider"/>
-        <button onClick={() => setView("tools")}>? &nbsp; Help &amp; Support</button>
+        <button onClick={goHome}>? &nbsp; Help &amp; Support</button>
         {view !== "tools" && view !== "saved-projects" && view !== "templates" && <><div className="nav-divider"/><div className="nav-category-label">Current tool</div><button className="active-tool">{currentTool?.label ?? "Tool"}</button></>}
       </nav>
       <div className="version">ENGINEERING TOOLS<br/><strong>Growing toolkit</strong></div>
     </aside>
-    <section className="workspace">{view === "tools" ? <EngineeringDashboard categories={TOOL_CATEGORIES} onOpenTool={openTool} onOpenHandbook={() => setShowHandbook(true)} onOpenSaved={() => setView("saved-projects")} onOpenTemplates={() => setView("templates")}/> : selectedTool}</section>
+    <section className="workspace">{view === "tools" ? <EngineeringDashboard key={dashboardKey} categories={TOOL_CATEGORIES} onOpenTool={openTool} onOpenHandbook={() => setShowHandbook(true)} onOpenSaved={() => setView("saved-projects")} onOpenTemplates={() => setView("templates")}/> : selectedTool}</section>
 
     {showHandbook && <div className="dashboard-modal-backdrop" onClick={() => setShowHandbook(false)}><div className="dashboard-modal handbook-modal" onClick={(e) => e.stopPropagation()}><button className="modal-close" onClick={() => setShowHandbook(false)}>×</button><p className="eyebrow">TECHNICAL BASIS & TRACEABILITY</p><h2>Engineering Handbook</h2><p className="modal-lead">A single place for the source documents, manuals, standards and engineering methods used by the tools.</p><div className="handbook-list">{HANDBOOK_ITEMS.map((item) => <div key={item.title}><span>▤</span><div><strong>{item.title}</strong><small>{item.detail}</small></div></div>)}</div><div className="handbook-note"><strong>Next step</strong><span>Each calculator can link directly to the references and assumptions that support its methodology.</span></div></div></div>}
   </main>;
