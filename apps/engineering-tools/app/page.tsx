@@ -33,7 +33,6 @@ const TOOL_CATEGORIES: DashboardCategory[] = [
     { view: "rational", icon: "RM", label: "Rational Method Runoff", desc: "Calculate peak runoff using site-specific BoM IFD rainfall intensities." },
     { view: "rorb", icon: "MF", label: "RORB Median Flow", desc: "Process temporal-pattern ensembles and identify critical flows." },
     { view: "gsdm", icon: "GP", label: "GSDM PMP", desc: "Short-duration PMP estimates and RORB rainfall inputs." },
-    { view: "sediment-pond", icon: "SD", label: "Sediment Pond Sizing", desc: "Fair & Geyer removal efficiency, basin stage-storage, cleanout and dewatering." },
   ]},
   { key: "hydraulics", label: "Hydraulics", description: "Channels, culverts, pipes, overland flow and scour.", icon: "≋", tools: [
     { view: "channel", icon: "CF", label: "Channel Flow", desc: "Trapezoidal channel flow calculations." },
@@ -60,6 +59,7 @@ const TOOL_CATEGORIES: DashboardCategory[] = [
   ]},
   { key: "storage", label: "Storage & Dams", description: "Stage-storage, detention and dam-related calculations.", icon: "▤", tools: [
     { view: "storage", icon: "SS", label: "Stage Storage", desc: "Stage-storage calculations and outputs." },
+    { view: "sediment-pond", icon: "SD", label: "Sediment Pond Sizing", desc: "Fair & Geyer removal efficiency, basin stage-storage, cleanout and dewatering." },
   ]},
   { key: "site-gis", label: "Site & GIS", description: "Site intelligence, planning overlays, cadastre and mapping.", icon: "⌖", tools: [
     { view: "site-intelligence", icon: "GIS", label: "Project Site Intelligence", desc: "Screen a Victorian site against planning, cadastral and waterway open data.", externalUrl: "https://siteintelligence.floodriskadvisory.com.au" },

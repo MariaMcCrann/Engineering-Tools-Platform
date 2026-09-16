@@ -15,6 +15,16 @@ const SEDIMENT_TARGETS: { label: string; vs: number }[] = [
   { label: "Very fine silt", vs: 0.04 / 1000 }, { label: "Clay", vs: 0.011 / 1000 }
 ];
 
+// Hydraulic efficiency, λ, by pond/wetland configuration (Fig 10.5, Australian Runoff Quality, 2003).
+// good ≥ 0.70; satisfactory 0.5–0.70; poor ≤ 0.5.
+const POND_SHAPE_FACTORS: { label: string; lambda: number }[] = [
+  { label: "A", lambda: 0.30 }, { label: "B", lambda: 0.26 }, { label: "C", lambda: 0.11 }, { label: "D", lambda: 0.18 },
+  { label: "E", lambda: 0.76 }, { label: "G", lambda: 0.76 }, { label: "H", lambda: 0.11 }, { label: "I", lambda: 0.41 },
+  { label: "J", lambda: 0.90 }, { label: "K", lambda: 0.36 }, { label: "O", lambda: 0.26 }, { label: "P", lambda: 0.61 },
+  { label: "Q", lambda: 0.59 }
+];
+const lambdaBand = (l: number) => (l > 0.70 ? "good" : l > 0.5 ? "satisfactory" : "poor");
+
 type StageRow = { stage: number; storage: number; area: number; length: number; width: number };
 function buildStageStorage(bottomLength: number, bottomWidth: number, sideSlope: number, maxStage: number, increment: number): StageRow[] {
   const sideLenPerIncrement = increment * sideSlope;
@@ -59,6 +69,37 @@ function Section({ number, title, children }: { number: number; title: string; c
 }
 function Metric({ name, value }: { name: string; value: string }) {
   return <div className="metric"><span>{name}</span><strong>{value}</strong></div>;
+}
+
+function BasinGeometryDiagram({ de, dp, dStar, bottomWidth, topWidth }: { de: number; dp: number; dStar: number; bottomWidth: number; topWidth: number }) {
+  if (![de, dp, dStar, bottomWidth, topWidth].every((v) => Number.isFinite(v) && v >= 0) || dp <= 0 || topWidth <= 0) return null;
+  const totalDepth = de + dp;
+  const halfTop = 120;
+  const halfBottom = Math.max(25, halfTop * (bottomWidth / topWidth));
+  const cx = 160, tedY = 18, baseY = 188;
+  const scale = (baseY - tedY) / totalDepth;
+  const nwlY = tedY + de * scale;
+  const dStarY = nwlY + dStar * scale;
+  const sedimentTopDepth = Math.max(0, dp - 0.5); // sediment accumulates from the base up to 0.5 m below NWL (cleanout trigger)
+  const sedimentTopY = nwlY + sedimentTopDepth * scale;
+  const halfWidthAtY = (y: number) => halfTop - (halfTop - halfBottom) * ((y - tedY) / (baseY - tedY));
+
+  return <div className="cross-section">
+    <h3>BASIN GEOMETRY (schematic)</h3>
+    <svg viewBox="0 0 320 225" role="img" aria-label="Sediment basin depth profile showing TED, NWL, permanent pool depth, retention depth and the accumulated sediment zone">
+      <path d={`M${cx - halfTop} ${tedY} L${cx + halfTop} ${tedY} L${cx + halfBottom} ${baseY} L${cx - halfBottom} ${baseY} Z`} fill="#eaf3fb" stroke="#263746" strokeWidth="1.4" />
+      <path d={`M${cx - halfBottom} ${baseY} L${cx + halfBottom} ${baseY} L${cx + halfWidthAtY(sedimentTopY)} ${sedimentTopY} L${cx - halfWidthAtY(sedimentTopY)} ${sedimentTopY} Z`} fill="#dcb488" opacity="0.85" />
+      <line x1={cx - halfTop - 8} y1={tedY} x2={cx + halfTop + 8} y2={tedY} stroke="#b91c1c" strokeDasharray="4 3" strokeWidth="1.2" />
+      <text x={cx - halfTop - 12} y={tedY + 3} textAnchor="end" fontSize="9" fill="#b91c1c">TED</text>
+      <line x1={cx - halfTop - 8} y1={nwlY} x2={cx + halfTop + 8} y2={nwlY} stroke="#2786c2" strokeDasharray="4 3" strokeWidth="1.2" />
+      <text x={cx - halfTop - 12} y={nwlY + 3} textAnchor="end" fontSize="9" fill="#2786c2">NWL</text>
+      <line x1={cx - halfWidthAtY(dStarY) - 6} y1={dStarY} x2={cx + halfWidthAtY(dStarY) + 6} y2={dStarY} stroke="#2f7d4f" strokeDasharray="3 3" strokeWidth="1.2" />
+      <text x={cx + halfWidthAtY(dStarY) + 10} y={dStarY + 3} fontSize="9" fill="#2f7d4f">d* = {fmt(dStar, 2)} m</text>
+      <text x={cx + halfTop + 12} y={(tedY + nwlY) / 2 + 3} fontSize="9">de = {fmt(de, 2)} m</text>
+      <text x={cx + halfTop + 12} y={(nwlY + baseY) / 2 + 3} fontSize="9">dp = {fmt(dp, 2)} m</text>
+      <text x={cx} y={baseY + 15} textAnchor="middle" fontSize="8" fill="#8a6a3d">Accumulated sediment at cleanout trigger (0.5 m below NWL)</text>
+    </svg>
+  </div>;
 }
 
 export function SedimentPondTool() {
@@ -120,7 +161,7 @@ export function SedimentPondTool() {
 
     return {
       vs, nwlWidth, nwlLength, bottomLength, bottomWidth, bottomArea,
-      depthRatio, overflowRatio, nExp, efficiency, efficiencyOk,
+      de, dp, dStar, depthRatio, overflowRatio, nExp, efficiency, efficiencyOk,
       requiredStorage, actualBasinDepth, actualBasinVolume, actualCleanoutFrequency, cleanoutOk,
       requiredDewateringArea, dewateringOk, sampled
     };
@@ -166,7 +207,12 @@ export function SedimentPondTool() {
         <Field label="Side slopes, 1 in X" value={sideSlope} onChange={setSideSlope} />
         <Field label="Pond shape factor, λ" value={shapeFactor} hint="Per Fig 10.5, WSUD Stormwater Technical Manual" onChange={setShapeFactor} />
         <Field label="Stage increment" value={stageIncrement} unit="m" onChange={setStageIncrement} />
-      </div></Section>
+      </div>
+      <section className="roughness-reference">
+        <div className="reference-head"><div><p className="eyebrow">REFERENCE TABLE</p><h2>Hydraulic efficiency, λ, by pond configuration</h2><span>Fig 10.5, Australian Runoff Quality (2003). Range 0–1; 1 = best hydrodynamic conditions.</span></div></div>
+        <div className="reference-table"><table><thead><tr><th>Configuration</th><th>λ</th><th>Efficiency</th><th></th></tr></thead><tbody>{POND_SHAPE_FACTORS.map((s) => <tr key={s.label}><td>{s.label}</td><td>{fmt(s.lambda, 2)}</td><td>{lambdaBand(s.lambda)}</td><td><button type="button" onClick={() => setShapeFactor(String(s.lambda))}>Use value</button></td></tr>)}</tbody></table></div>
+        <p className="engine-note">λ = (1 − 1/N) = (t<sub>mean</sub>/t<sub>n</sub>)(1 − (t<sub>mean</sub>−t<sub>p</sub>)/t<sub>mean</sub>) = t<sub>p</sub>/t<sub>n</sub>. Good hydraulic efficiency: λ &gt; 0.70; satisfactory: 0.5 &lt; λ ≤ 0.70; poor: λ ≤ 0.5.</p>
+      </section></Section>
       <Section number={3} title="Cleanout and dewatering"><div className="calc-fields">
         <Field label="Contributing catchment area, Ca" value={catchmentArea} unit="ha" onChange={setCatchmentArea} />
         <Field label="Sediment loading rate, Lo" value={sedimentLoadRate} unit="m³/ha/yr" hint="1.6 — Willing and Partners 1992, urban load" onChange={setSedimentLoadRate} />
@@ -186,6 +232,7 @@ export function SedimentPondTool() {
       <Metric name="NWL length / width" value={fmt(r.nwlLength) + " / " + fmt(r.nwlWidth) + " m"} />
       <Metric name="Bottom length / width" value={fmt(r.bottomLength) + " / " + fmt(r.bottomWidth) + " m"} />
       <Metric name="Bottom area" value={fmt(r.bottomArea, 1) + " m²"} />
+      <BasinGeometryDiagram de={r.de} dp={r.dp} dStar={r.dStar} bottomWidth={r.bottomWidth} topWidth={r.nwlWidth} />
       <h3 className="result-section-title">Cleanout and dewatering</h3>
       <Metric name="Required storage, St" value={fmt(r.requiredStorage, 1) + " m³"} />
       <Metric name="Actual basin volume (0.5m below NWL)" value={fmt(r.actualBasinVolume, 1) + " m³"} />
