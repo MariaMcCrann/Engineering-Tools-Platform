@@ -13,10 +13,11 @@ import { PipeSizingTool, PipelineHglTool } from "./pipeline-tools";
 import { RockProtectionTool } from "./RockProtectionTool";
 import { HeadwallStructuralTool, BaseSlabStructuralTool } from "./StructuralConcreteTools";
 import { RorbMedianFlowTool } from "./RorbMedianFlowTool";
+import { BroadCrestedWeirTool } from "./BroadCrestedWeirTool";
 import { EngineeringDashboard, DashboardCategory, DashboardTool, HANDBOOK_ITEMS } from "./EngineeringDashboard";
 import { SavedProjectsPanel, SaveProjectControl, CalculationTemplatesPanel, SavedProject, loadSavedProjects, persistSavedProjects } from "./WorkspacePanels";
 
-type ViewKey = "tools" | "saved-projects" | "templates" | "rorb" | "rational" | "channel" | "storage" | "overland" | "rising" | "gsdm" | "spillway" | "culvert" | "headloss" | "pipe-sizing" | "pipeline-hgl" | "rock-protection" | "headwall-concrete" | "base-slab-concrete" | "proposal" | "site-intelligence";
+type ViewKey = "tools" | "saved-projects" | "templates" | "rorb" | "rational" | "channel" | "storage" | "overland" | "rising" | "gsdm" | "spillway" | "culvert" | "headloss" | "pipe-sizing" | "pipeline-hgl" | "rock-protection" | "headwall-concrete" | "base-slab-concrete" | "broad-crested-weir" | "proposal" | "site-intelligence";
 type ToolEntry = DashboardTool & { view: Exclude<ViewKey, "tools" | "saved-projects" | "templates"> };
 
 const TOOL_CATEGORIES: DashboardCategory[] = [
@@ -35,6 +36,7 @@ const TOOL_CATEGORIES: DashboardCategory[] = [
     { view: "rock-protection", icon: "RP", label: "Rock Protection / Riprap", desc: "Preliminary D50 and culvert outlet apron sizing using HEC-14 guidance." },
     { view: "rising", icon: "RM", label: "Rising Main", desc: "Pipe losses, surge pressure, thrust blocks and pump-sump cycling." },
     { view: "spillway", icon: "SP", label: "Spillway", desc: "Weir flow, chute hydraulics and stilling-basin checks." },
+    { view: "broad-crested-weir", icon: "BW", label: "Broad Crested Weir", desc: "Open channel discharge via a broad crested weir, per AS3778.4.2." },
   ]},
   { key: "structures", label: "Structures", description: "Concrete headwalls, slabs and structural checks.", icon: "▥", tools: [
     { view: "headwall-concrete", icon: "HW", label: "Headwall Concrete", desc: "AS 3600 headwall bending, minimum steel and shear screening checks." },
@@ -101,6 +103,7 @@ export default function Home() {
     : view === "gsdm" ? <>{toolHeader("GSDM PMP", "gsdm")}<GsdmPmpTool/></>
     : view === "spillway" ? <>{toolHeader("Spillway", "spillway")}<SpillwayTool/></>
     : view === "culvert" ? <>{toolHeader("Culvert", "culvert")}<CulvertTool/></>
+    : view === "broad-crested-weir" ? <>{toolHeader("Broad Crested Weir", "broad-crested-weir")}<BroadCrestedWeirTool/></>
     : view === "proposal" ? <>{toolHeader("Proposal Tool", "proposal")}<ProposalTool/></> : null;
 
   return <main className="app-shell">
