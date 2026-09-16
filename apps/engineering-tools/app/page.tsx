@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ChannelFlowTool, ProposalTool, StageStorageTool } from "./EngineeringTools";
 import { OverlandFlowTool } from "./OverlandFlowTool";
 import { RisingMainTool } from "./RisingMainTool";
@@ -13,10 +13,11 @@ import { PipeSizingTool, PipelineHglTool } from "./pipeline-tools";
 import { RockProtectionTool } from "./RockProtectionTool";
 import { HeadwallStructuralTool, BaseSlabStructuralTool } from "./StructuralConcreteTools";
 import { RorbMedianFlowTool } from "./RorbMedianFlowTool";
-import { EngineeringDashboard, DashboardCategory, DashboardTool } from "./EngineeringDashboard";
+import { EngineeringDashboard, DashboardCategory, DashboardTool, HANDBOOK_ITEMS } from "./EngineeringDashboard";
+import { SavedProjectsPanel, SaveProjectControl, CalculationTemplatesPanel, SavedProject, loadSavedProjects, persistSavedProjects } from "./WorkspacePanels";
 
-type ViewKey = "tools" | "rorb" | "rational" | "channel" | "storage" | "overland" | "rising" | "gsdm" | "spillway" | "culvert" | "headloss" | "pipe-sizing" | "pipeline-hgl" | "rock-protection" | "headwall-concrete" | "base-slab-concrete" | "proposal" | "site-intelligence";
-type ToolEntry = DashboardTool & { view: Exclude<ViewKey, "tools"> };
+type ViewKey = "tools" | "saved-projects" | "templates" | "rorb" | "rational" | "channel" | "storage" | "overland" | "rising" | "gsdm" | "spillway" | "culvert" | "headloss" | "pipe-sizing" | "pipeline-hgl" | "rock-protection" | "headwall-concrete" | "base-slab-concrete" | "proposal" | "site-intelligence";
+type ToolEntry = DashboardTool & { view: Exclude<ViewKey, "tools" | "saved-projects" | "templates"> };
 
 const TOOL_CATEGORIES: DashboardCategory[] = [
   { key: "hydrology", label: "Hydrology & Catchments", description: "Rainfall, catchment analysis, runoff and flood estimation.", icon: "💧", tools: [
@@ -55,29 +56,74 @@ const TOOL_CATEGORIES: DashboardCategory[] = [
 
 export default function Home() {
   const [view, setView] = useState<ViewKey>("tools");
+  const [showHandbook, setShowHandbook] = useState(false);
+  const [savedProjects, setSavedProjects] = useState<SavedProject[]>([]);
+
+  useEffect(() => { setSavedProjects(loadSavedProjects()); }, []);
+
+  const saveProject = (project: SavedProject) => {
+    setSavedProjects((prev) => {
+      const next = [...prev, project];
+      persistSavedProjects(next);
+      return next;
+    });
+  };
+  const deleteProject = (id: string) => {
+    setSavedProjects((prev) => {
+      const next = prev.filter((p) => p.id !== id);
+      persistSavedProjects(next);
+      return next;
+    });
+  };
+
   const allTools = TOOL_CATEGORIES.flatMap((category) => category.tools) as ToolEntry[];
   const currentTool = allTools.find((tool) => tool.view === view);
   const openTool = (tool: DashboardTool) => { if (tool.disabled) return; if (tool.externalUrl) { window.open(tool.externalUrl, "_blank", "noopener,noreferrer"); return; } setView(tool.view as ViewKey); };
 
-  const selectedTool = view === "rorb" ? <RorbMedianFlowTool/>
-    : view === "rational" ? <><header className="hub-header"><span>Rational Method Runoff</span></header><RationalMethodTool/></>
-    : view === "channel" ? <><header className="hub-header"><span>Channel Flow</span></header><ChannelFlowTool/></>
-    : view === "storage" ? <><header className="hub-header"><span>Stage Storage</span></header><StageStorageTool/></>
-    : view === "overland" ? <><header className="hub-header"><span>Overland Flow</span></header><OverlandFlowTool/></>
-    : view === "headloss" ? <><header className="hub-header"><span>Pipe Headloss</span></header><HeadlossTool/></>
-    : view === "pipe-sizing" ? <><header className="hub-header"><span>Pipe Sizing</span></header><PipeSizingTool/></>
-    : view === "pipeline-hgl" ? <><header className="hub-header"><span>Pipeline HGL</span></header><PipelineHglTool/></>
-    : view === "rock-protection" ? <><header className="hub-header"><span>Rock Protection / Riprap</span></header><RockProtectionTool/></>
-    : view === "headwall-concrete" ? <><header className="hub-header"><span>Headwall Concrete</span></header><HeadwallStructuralTool/></>
-    : view === "base-slab-concrete" ? <><header className="hub-header"><span>Base Slab Concrete</span></header><BaseSlabStructuralTool/></>
-    : view === "rising" ? <><header className="hub-header"><span>Rising Main</span></header><RisingMainTool/></>
-    : view === "gsdm" ? <><header className="hub-header"><span>GSDM PMP</span></header><GsdmPmpTool/></>
-    : view === "spillway" ? <><header className="hub-header"><span>Spillway</span></header><SpillwayTool/></>
-    : view === "culvert" ? <><header className="hub-header"><span>Culvert</span></header><CulvertTool/></>
-    : view === "proposal" ? <><header className="hub-header"><span>Proposal Tool</span></header><ProposalTool/></> : null;
+  const toolHeader = (label: string, key: Exclude<ViewKey, "tools" | "saved-projects" | "templates">) => (
+    <header className="hub-header"><span>{label}</span><SaveProjectControl toolView={key} toolLabel={label} onSave={saveProject} /></header>
+  );
+
+  const selectedTool = view === "saved-projects" ? <SavedProjectsPanel projects={savedProjects} onOpen={(v) => setView(v as ViewKey)} onDelete={deleteProject} onBack={() => setView("tools")}/>
+    : view === "templates" ? <CalculationTemplatesPanel onOpen={(v) => setView(v as ViewKey)} onBack={() => setView("tools")}/>
+    : view === "rorb" ? <>{toolHeader("RORB Median Flow", "rorb")}<RorbMedianFlowTool/></>
+    : view === "rational" ? <>{toolHeader("Rational Method Runoff", "rational")}<RationalMethodTool/></>
+    : view === "channel" ? <>{toolHeader("Channel Flow", "channel")}<ChannelFlowTool/></>
+    : view === "storage" ? <>{toolHeader("Stage Storage", "storage")}<StageStorageTool/></>
+    : view === "overland" ? <>{toolHeader("Overland Flow", "overland")}<OverlandFlowTool/></>
+    : view === "headloss" ? <>{toolHeader("Pipe Headloss", "headloss")}<HeadlossTool/></>
+    : view === "pipe-sizing" ? <>{toolHeader("Pipe Sizing", "pipe-sizing")}<PipeSizingTool/></>
+    : view === "pipeline-hgl" ? <>{toolHeader("Pipeline HGL", "pipeline-hgl")}<PipelineHglTool/></>
+    : view === "rock-protection" ? <>{toolHeader("Rock Protection / Riprap", "rock-protection")}<RockProtectionTool/></>
+    : view === "headwall-concrete" ? <>{toolHeader("Headwall Concrete", "headwall-concrete")}<HeadwallStructuralTool/></>
+    : view === "base-slab-concrete" ? <>{toolHeader("Base Slab Concrete", "base-slab-concrete")}<BaseSlabStructuralTool/></>
+    : view === "rising" ? <>{toolHeader("Rising Main", "rising")}<RisingMainTool/></>
+    : view === "gsdm" ? <>{toolHeader("GSDM PMP", "gsdm")}<GsdmPmpTool/></>
+    : view === "spillway" ? <>{toolHeader("Spillway", "spillway")}<SpillwayTool/></>
+    : view === "culvert" ? <>{toolHeader("Culvert", "culvert")}<CulvertTool/></>
+    : view === "proposal" ? <>{toolHeader("Proposal Tool", "proposal")}<ProposalTool/></> : null;
 
   return <main className="app-shell">
-    <aside className="sidebar dashboard-nav"><div className="brand"><img className="personal-mark" src="/brand-mark.svg" alt=""/><span>ENGINEERING<br/>TOOLS</span></div><nav className="tool-nav"><button className={view === "tools" ? "nav-selected" : ""} onClick={() => setView("tools")}>⌂ &nbsp; Home</button><button onClick={() => setView("tools")}>▦ &nbsp; All Tools</button><button onClick={() => setView("tools")}>▦ &nbsp; Categories</button><button onClick={() => setView("tools")}>☆ &nbsp; Favourites</button><button onClick={() => setView("tools")}>◷ &nbsp; Recently Used</button><div className="nav-divider"/><button onClick={() => setView("tools")}>▤ &nbsp; Engineering Handbook</button><button onClick={() => setView("tools")}>＋ &nbsp; Request a New Tool</button>{view !== "tools" && <><div className="nav-divider"/><div className="nav-category-label">Current tool</div><button className="active-tool">{currentTool?.label ?? "Tool"}</button></>}</nav><div className="version">ENGINEERING TOOLS<br/><strong>Growing toolkit</strong></div></aside>
-    <section className="workspace">{view === "tools" ? <EngineeringDashboard categories={TOOL_CATEGORIES} onOpenTool={openTool}/> : selectedTool}</section>
+    <aside className="sidebar dashboard-nav">
+      <div className="brand"><img className="personal-mark" src="/brand-mark.svg" alt=""/><span className="brand-text"><strong>FLOOD RISK<br/>ADVISORY</strong><small>Engineering Tools</small></span></div>
+      <nav className="tool-nav">
+        <button className={view === "tools" ? "nav-selected" : ""} onClick={() => setView("tools")}>⌂ &nbsp; Home</button>
+        <button onClick={() => setView("tools")}>▦ &nbsp; All Tools</button>
+        <button onClick={() => setView("tools")}>▦ &nbsp; Categories</button>
+        <button onClick={() => setView("tools")}>☆ &nbsp; Favourites</button>
+        <button onClick={() => setView("tools")}>◷ &nbsp; Recently Used</button>
+        <div className="nav-divider"/>
+        <button className={view === "saved-projects" ? "nav-selected" : ""} onClick={() => setView("saved-projects")}>▢ &nbsp; Saved Projects</button>
+        <button className={view === "templates" ? "nav-selected" : ""} onClick={() => setView("templates")}>▤ &nbsp; Calculation Templates</button>
+        <button onClick={() => setShowHandbook(true)}>▤ &nbsp; Source Documents</button>
+        <div className="nav-divider"/>
+        <button onClick={() => setView("tools")}>? &nbsp; Help &amp; Support</button>
+        {view !== "tools" && view !== "saved-projects" && view !== "templates" && <><div className="nav-divider"/><div className="nav-category-label">Current tool</div><button className="active-tool">{currentTool?.label ?? "Tool"}</button></>}
+      </nav>
+      <div className="version">ENGINEERING TOOLS<br/><strong>Growing toolkit</strong></div>
+    </aside>
+    <section className="workspace">{view === "tools" ? <EngineeringDashboard categories={TOOL_CATEGORIES} onOpenTool={openTool} onOpenHandbook={() => setShowHandbook(true)} onOpenSaved={() => setView("saved-projects")} onOpenTemplates={() => setView("templates")}/> : selectedTool}</section>
+
+    {showHandbook && <div className="dashboard-modal-backdrop" onClick={() => setShowHandbook(false)}><div className="dashboard-modal handbook-modal" onClick={(e) => e.stopPropagation()}><button className="modal-close" onClick={() => setShowHandbook(false)}>×</button><p className="eyebrow">TECHNICAL BASIS & TRACEABILITY</p><h2>Engineering Handbook</h2><p className="modal-lead">A single place for the source documents, manuals, standards and engineering methods used by the tools.</p><div className="handbook-list">{HANDBOOK_ITEMS.map((item) => <div key={item.title}><span>▤</span><div><strong>{item.title}</strong><small>{item.detail}</small></div></div>)}</div><div className="handbook-note"><strong>Next step</strong><span>Each calculator can link directly to the references and assumptions that support its methodology.</span></div></div></div>}
   </main>;
 }

@@ -20,7 +20,7 @@ export type DashboardCategory = {
   tools: DashboardTool[];
 };
 
-const HANDBOOK_ITEMS = [
+export const HANDBOOK_ITEMS = [
   { title: "Engineering Handbook", detail: "Methods, assumptions, standards and calculation guidance." },
   { title: "ARR2019", detail: "Australian Rainfall and Runoff guidance used by hydrology tools." },
   { title: "Hydraulic references", detail: "Manning, culvert, pipe, spillway and scour design references." },
@@ -28,10 +28,9 @@ const HANDBOOK_ITEMS = [
   { title: "Authority manuals", detail: "DTP, CMA, GMW, VicPlan and other authority guidance." },
 ];
 
-export function EngineeringDashboard({ categories, onOpenTool }: { categories: DashboardCategory[]; onOpenTool: (tool: DashboardTool) => void }) {
+export function EngineeringDashboard({ categories, onOpenTool, onOpenHandbook, onOpenSaved, onOpenTemplates }: { categories: DashboardCategory[]; onOpenTool: (tool: DashboardTool) => void; onOpenHandbook: () => void; onOpenSaved: () => void; onOpenTemplates: () => void }) {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<string | null>(null);
-  const [showHandbook, setShowHandbook] = useState(false);
   const [showRequest, setShowRequest] = useState(false);
   const [requestText, setRequestText] = useState("");
   const [requestSent, setRequestSent] = useState(false);
@@ -44,10 +43,18 @@ export function EngineeringDashboard({ categories, onOpenTool }: { categories: D
   const favourites = allTools.filter((tool) => ["rational", "rorb", "culvert", "site-intelligence", "storage"].includes(tool.view)).slice(0, 5);
 
   return <div className="dashboard-shell">
-    <div className="dashboard-search"><span>⌕</span><input value={query} onChange={(e) => { setQuery(e.target.value); setCategory(null); }} placeholder={'Search tools, e.g. “RORB”, “culvert”, “headwall”, “storage”…'} /></div>
+    <div className="dashboard-topbar">
+      <div className="dashboard-search"><span>⌕</span><input value={query} onChange={(e) => { setQuery(e.target.value); setCategory(null); }} placeholder={'Search tools (e.g. "RORB", "culvert", "headwall", "VicPlan", "storage")…'} /><kbd>Ctrl+K</kbd></div>
+      <button className="topbar-bell" aria-label="Notifications">🔔</button>
+      <button className="topbar-user"><span className="topbar-avatar">MM</span><span>Maria McCrann</span><em>⌄</em></button>
+    </div>
     <div className="dashboard-layout">
       <div className="dashboard-main">
-        <div className="dashboard-intro"><p className="eyebrow">ENGINEERING WORKSPACE</p><h1>Engineering Tools</h1><p>Practical tools for flood, water and infrastructure engineering.</p></div>
+        <div className="dashboard-intro">
+          <h1>Engineering Tools</h1>
+          <p>Practical tools for flood, water and infrastructure engineering.</p>
+          <div className="hero-banner"><span>Better decisions.<br/>Resilient communities.</span></div>
+        </div>
 
         {!query && !category ? <>
           <div className="dashboard-section-head"><h2>Browse by Category</h2><button onClick={() => setCategory("all")}>View all tools →</button></div>
@@ -62,13 +69,11 @@ export function EngineeringDashboard({ categories, onOpenTool }: { categories: D
       </div>
 
       <aside className="dashboard-side">
-        <section><h3>⚙ Quick Actions</h3><button onClick={() => { setShowRequest(true); setRequestSent(false); }}><b>＋</b><span><strong>Request a New Tool</strong><small>Have an idea? Add it to the pipeline.</small></span><em>›</em></button><button onClick={() => setShowHandbook(true)}><b>▤</b><span><strong>Engineering Handbook</strong><small>Sources, standards, manuals and methods.</small></span><em>›</em></button></section>
+        <section><h3>⚙ Quick Actions</h3><button onClick={() => { setShowRequest(true); setRequestSent(false); }}><b>＋</b><span><strong>Request a New Tool</strong><small>Have an idea? Add it to the pipeline.</small></span><em>›</em></button><button onClick={onOpenSaved}><b>▢</b><span><strong>Saved Projects</strong><small>Access your saved calculations.</small></span><em>›</em></button><button onClick={onOpenTemplates}><b>▤</b><span><strong>Calculation Templates</strong><small>Use and manage templates.</small></span><em>›</em></button></section>
         <section><h3>◷ Recently Used</h3>{favourites.slice(0,4).map((tool) => <button key={tool.view} onClick={() => onOpenTool(tool)} disabled={tool.disabled}><b>{tool.icon}</b><span><strong>{tool.label}</strong></span><em>›</em></button>)}</section>
-        <section><h3>▣ Source Documents & Manuals</h3>{HANDBOOK_ITEMS.slice(1,5).map((item) => <button key={item.title} onClick={() => setShowHandbook(true)}><b>▤</b><span><strong>{item.title}</strong><small>{item.detail}</small></span><em>›</em></button>)}<button className="view-handbook" onClick={() => setShowHandbook(true)}>Open Engineering Handbook →</button></section>
+        <section><h3>▣ Source Documents & Manuals</h3>{HANDBOOK_ITEMS.slice(1,5).map((item) => <button key={item.title} onClick={onOpenHandbook}><b>▤</b><span><strong>{item.title}</strong><small>{item.detail}</small></span><em>›</em></button>)}<button className="view-handbook" onClick={onOpenHandbook}>Open Engineering Handbook →</button></section>
       </aside>
     </div>
-
-    {showHandbook && <div className="dashboard-modal-backdrop" onClick={() => setShowHandbook(false)}><div className="dashboard-modal handbook-modal" onClick={(e) => e.stopPropagation()}><button className="modal-close" onClick={() => setShowHandbook(false)}>×</button><p className="eyebrow">TECHNICAL BASIS & TRACEABILITY</p><h2>Engineering Handbook</h2><p className="modal-lead">A single place for the source documents, manuals, standards and engineering methods used by the tools.</p><div className="handbook-list">{HANDBOOK_ITEMS.map((item) => <div key={item.title}><span>▤</span><div><strong>{item.title}</strong><small>{item.detail}</small></div></div>)}</div><div className="handbook-note"><strong>Next step</strong><span>Each calculator can link directly to the references and assumptions that support its methodology.</span></div></div></div>}
 
     {showRequest && <div className="dashboard-modal-backdrop" onClick={() => setShowRequest(false)}><div className="dashboard-modal" onClick={(e) => e.stopPropagation()}><button className="modal-close" onClick={() => setShowRequest(false)}>×</button><p className="eyebrow">TOOL PIPELINE</p><h2>Request a New Tool</h2>{requestSent ? <div className="request-success"><strong>Request captured</strong><p>The request is saved in this browser for now. A database/email workflow can be connected next.</p></div> : <><p className="modal-lead">What calculation, check or engineering workflow would make your work easier?</p><label className="request-field">Tool idea or problem to solve<textarea value={requestText} onChange={(e) => setRequestText(e.target.value)} placeholder="e.g. I need a quick calculator for…" /></label><button className="request-submit" disabled={!requestText.trim()} onClick={() => { localStorage.setItem(`engineering-tool-request-${Date.now()}`, requestText.trim()); setRequestSent(true); setRequestText(""); }}>Submit Request</button></>}</div></div>}
   </div>;

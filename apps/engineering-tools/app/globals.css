@@ -6,8 +6,11 @@ body { margin:0; background:#f3f5f8; color:var(--ink); font-family:Arial, Helvet
 button,input,select { font:inherit; }
 .app-shell { min-height:100vh; display:grid; grid-template-columns:214px 1fr; }
 .sidebar { position:sticky; top:0; height:100vh; background:#fff; border-right:1px solid #dbe2eb; display:flex; flex-direction:column; }
-.brand { height:114px; display:flex; align-items:center; gap:7px; padding:0 16px; border-bottom:1px solid #dde4ec; color:#6d7e92; font-size:8px; line-height:1.2; }
-.personal-mark { width:40px; height:40px; border-radius:50%; object-fit:cover; }
+.brand { height:114px; display:flex; align-items:center; gap:10px; padding:0 16px; border-bottom:1px solid #dde4ec; color:#6d7e92; font-size:8px; line-height:1.2; }
+.personal-mark { width:34px; height:34px; border-radius:50%; object-fit:cover; }
+.brand-text { display:flex; flex-direction:column; gap:4px; }
+.brand-text strong { color:#1c2e47; font-size:13px; font-weight:800; letter-spacing:.02em; line-height:1.25; }
+.brand-text small { color:#3569ad; font-size:10px; font-weight:600; }
 .tool-nav { padding-top:18px; }
 .tool-nav button { width:100%; text-align:left; border:0; background:none; color:#65738a; padding:10px 18px; }
 .tool-nav button { cursor:pointer; }
