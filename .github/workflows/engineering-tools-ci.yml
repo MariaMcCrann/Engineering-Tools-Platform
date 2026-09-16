@@ -36,3 +36,6 @@ jobs:
 
       - name: Build Engineering Tools
         run: npm run build
+
+      - name: Test tool request email route
+        run: node --experimental-strip-types --test tests/tool-requests.test.mjs
