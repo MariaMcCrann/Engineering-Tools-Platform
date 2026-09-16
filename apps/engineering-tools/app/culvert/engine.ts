@@ -155,6 +155,8 @@ export function validateInput(input: CulvertInput): void {
   assertPositive("Slope", input.slope);
   assertPositive("Manning roughness", input.roughness);
   assertPositive("Discharge", input.discharge);
+  if (!Number.isInteger(input.barrels)) throw new Error("Number of barrels must be a whole number.");
+  if (input.inletInvertLevel !== undefined && !Number.isFinite(input.inletInvertLevel)) throw new Error("Inlet invert level must be finite.");
 
   if (!Number.isFinite(input.tailwaterDepth) || input.tailwaterDepth < 0) {
     throw new Error("Tailwater depth cannot be negative.");
@@ -522,6 +524,10 @@ export function calculateCulvert(input: CulvertInput): CulvertResult {
   const capacityUtilisation = input.discharge / fullFlowCapacity;
   const warnings: string[] = [];
 
+  if (inletControl.headwaterDepth < criticalDepth) {
+    warnings.push("The selected inlet equation predicts headwater below critical depth. Check that the equation form matches the entrance coefficients before using this inlet-control result.");
+  }
+
   if (capacityUtilisation > 1) {
     warnings.push("Design flow exceeds the estimated full-flow Manning capacity.");
   } else if (capacityUtilisation > 0.8) {
@@ -698,7 +704,7 @@ export interface WaterSurfaceProfile {
 }
 
 /** The numerically-solved stations, excluding any synthetic boundary-extension point. */
-function realStations(profile: WaterSurfaceProfile): ProfileStation[] {
+export function realStations(profile: WaterSurfaceProfile): ProfileStation[] {
   return (profile.reachedFull || profile.reachedCritical) ? profile.stations.slice(0, -1) : profile.stations;
 }
 
@@ -957,15 +963,9 @@ export function traceCulvertProfile(input: CulvertInput): CulvertProfileResult {
 // ---------------------------------------------------------------------------
 // Receiving-channel tailwater rating (normal depth of the downstream
 // channel), ported from modprecalculos.bas calculoy2()/calculoy2canalnatural.
-// Rectangular and trapezoidal channels assume the channel invert coincides
-// with the culvert outlet invert, matching the legacy behaviour for those two
-// cases. The natural-channel solver here takes cross-section points on the
-// same absolute elevation datum as inletInvertLevel (rather than a depth
-// relative to a separately-entered channel bottom level, as the legacy form
-// requires) and computes wetted area/perimeter by clipping the surveyed
-// polyline at a trial water elevation — mathematically the same rating-curve
-// concept as the legacy's 50-point discretization, just computed directly
-// from the polyline instead of pre-binning into fixed depth increments.
+// Solvers return depth above the channel bed/thalweg. inputForDischarge
+// converts the resulting water level to depth above the culvert outlet,
+// using the common project datum and the TOTAL flow through all barrels.
 // ---------------------------------------------------------------------------
 
 export interface RectangularChannel {
@@ -1078,9 +1078,16 @@ export function solveNaturalChannelDepth(discharge: number, channel: NaturalChan
   if (channel.points.length < 2) {
     throw new Error("A natural channel cross-section needs at least two points.");
   }
+  if (channel.points.some((point) => !Number.isFinite(point.station) || !Number.isFinite(point.elevation))) {
+    throw new Error("Natural channel stations and elevations must be finite numbers.");
+  }
   const sorted = [...channel.points].sort((a, b) => a.station - b.station);
   const thalweg = Math.min(...sorted.map((point) => point.elevation));
-  const crest = Math.max(...sorted.map((point) => point.elevation));
+  // Do not extrapolate beyond either surveyed end of the cross-section.
+  const crest = Math.min(sorted[0].elevation, sorted[sorted.length - 1].elevation);
+  if (sorted.some((point, index) => index > 0 && point.station === sorted[index - 1].station)) {
+    throw new Error("Natural channel stations must be unique.");
+  }
   if (crest <= thalweg) {
     throw new Error("The natural channel cross-section must include a bank above the lowest point.");
   }
@@ -1091,11 +1098,15 @@ export function solveNaturalChannelDepth(discharge: number, channel: NaturalChan
     return area * (area / perimeter) ** (2 / 3) * Math.sqrt(channel.slope) / channel.manningN;
   };
 
-  if (discharge >= capacity(crest)) return crest - thalweg;
+  const bankCapacity = capacity(crest);
+  if (discharge > bankCapacity * (1 + 1e-9)) {
+    throw new Error("Flow exceeds the surveyed channel capacity. Extend the cross-section to higher ground.");
+  }
+  if (discharge >= bankCapacity) return crest - thalweg;
   const solvedElevation = bisect(
     (elevation) => capacity(elevation) - discharge,
-    thalweg + (crest - thalweg) * 1e-6,
-    crest - (crest - thalweg) * 1e-9,
+    thalweg,
+    crest,
   );
   return solvedElevation - thalweg;
 }
@@ -1118,6 +1129,7 @@ export interface HydrographRowResult {
   time: number;
   discharge: number;
   result: CulvertResult | null;
+  input: CulvertInput | null;
   error: string;
 }
 
@@ -1126,17 +1138,20 @@ export interface CulvertHydrographResult {
   peakIndex: number | null;
 }
 
-export function runCulvertHydrograph(baseInput: CulvertInput, rows: HydrographRow[]): CulvertHydrographResult {
+export function runCulvertHydrograph(baseInput: CulvertInput, rows: HydrographRow[], tailwater?: TailwaterDefinition): CulvertHydrographResult {
   if (rows.length === 0) {
     throw new Error("The hydrograph needs at least one row.");
   }
 
   const results: HydrographRowResult[] = rows.map((row) => {
     try {
+      if (!Number.isFinite(row.time) || row.time < 0) throw new Error("Hydrograph time must be a finite, non-negative value.");
+      const input = inputForDischarge(baseInput, row.discharge, tailwater);
       return {
         time: row.time,
         discharge: row.discharge,
-        result: calculateCulvert({ ...baseInput, discharge: row.discharge }),
+        result: calculateCulvert(input),
+        input,
         error: "",
       };
     } catch (error) {
@@ -1144,6 +1159,7 @@ export function runCulvertHydrograph(baseInput: CulvertInput, rows: HydrographRo
         time: row.time,
         discharge: row.discharge,
         result: null,
+        input: null,
         error: error instanceof Error ? error.message : "Calculation failed.",
       };
     }
@@ -1161,3 +1177,74 @@ export function runCulvertHydrograph(baseInput: CulvertInput, rows: HydrographRo
   return { rows: results, peakIndex };
 }
 
+
+// The original calculoy2 is rerun for every discharge, including calibration curves.
+export type TailwaterDefinition =
+  | { kind: "direct"; depth: number }
+  | { kind: "rectangular"; channel: RectangularChannel; bedLevel: number }
+  | { kind: "trapezoidal"; channel: TrapezoidalChannel; bedLevel: number }
+  | { kind: "natural"; channel: NaturalChannel };
+
+export function inputForDischarge(base: CulvertInput, discharge: number, tailwater?: TailwaterDefinition): CulvertInput {
+  assertPositive("Discharge", discharge);
+  if (!tailwater) return { ...base, discharge };
+  let depth: number;
+  if (tailwater.kind === "direct") {
+    depth = tailwater.depth;
+  } else {
+    const outletLevel = (base.inletInvertLevel ?? 0) - base.slope * base.length;
+    let waterLevel: number;
+    if (tailwater.kind === "natural") {
+      waterLevel = solveNaturalChannelDepth(discharge, tailwater.channel) + Math.min(...tailwater.channel.points.map((p) => p.elevation));
+    } else {
+      if (!Number.isFinite(tailwater.bedLevel)) throw new Error("Receiving-channel bed level must be finite.");
+      const channelDepth = tailwater.kind === "rectangular"
+        ? solveRectangularChannelDepth(discharge, tailwater.channel)
+        : solveTrapezoidalChannelDepth(discharge, tailwater.channel);
+      waterLevel = tailwater.bedLevel + channelDepth;
+    }
+    depth = Math.max(0, waterLevel - outletLevel);
+  }
+  if (!Number.isFinite(depth) || depth < 0) throw new Error("Tailwater depth must be finite and non-negative.");
+  return { ...base, discharge, tailwaterDepth: depth };
+}
+
+export interface RatingCurveRow {
+  discharge: number;
+  input: CulvertInput | null;
+  result: CulvertResult | null;
+  error: string;
+}
+
+/** Original frmcurvacalibracion: 20 equal flow intervals, including both ends. */
+export function calculateRatingCurve(base: CulvertInput, minimum: number, maximum: number, tailwater?: TailwaterDefinition, intervals = 20): RatingCurveRow[] {
+  assertPositive("Minimum flow", minimum);
+  if (!Number.isFinite(maximum) || maximum <= minimum) throw new Error("Maximum flow must exceed minimum flow.");
+  if (!Number.isInteger(intervals) || intervals < 1 || intervals > 100) throw new Error("Use 1–100 flow intervals.");
+  return Array.from({ length: intervals + 1 }, (_, index) => {
+    const discharge = minimum + (maximum - minimum) * index / intervals;
+    try {
+      const input = inputForDischarge(base, discharge, tailwater);
+      return { discharge, input, result: calculateCulvert(input), error: "" };
+    } catch (error) {
+      return { discharge, input: null, result: null, error: error instanceof Error ? error.message : "Calculation failed." };
+    }
+  });
+}
+
+/** Detailed table follows the original standard-step output; excludes display-only extensions. */
+export function profileCalculationRows(input: CulvertInput, profile: WaterSurfaceProfile) {
+  return [...realStations(profile)].sort((a, b) => a.x - b.x).map((station) => {
+    const section = sectionProperties(input, station.depth);
+    const velocityHead = station.velocity ** 2 / (2 * GRAVITY);
+    return {
+      ...station,
+      area: section.area,
+      wettedPerimeter: section.wettedPerimeter,
+      hydraulicRadius: section.hydraulicRadius,
+      velocityHead,
+      energyLevel: station.waterSurfaceElevation + velocityHead,
+      frictionSlope: (input.roughness * station.velocity / section.hydraulicRadius ** (2 / 3)) ** 2,
+    };
+  });
+}

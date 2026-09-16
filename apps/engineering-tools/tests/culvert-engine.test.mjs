@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   autoSizeCulvert,
+  inputForDischarge,
+  calculateRatingCurve,
+  profileCalculationRows,
   calculateCulvert,
   calculateInletControl,
   calculateOutletControl,
@@ -347,7 +350,7 @@ test("channel solvers reject invalid geometry and unsorted natural-channel point
   assert.ok(Math.abs(forward - shuffled) < 1e-9);
 });
 
-test("a discharge exceeding the natural channel's surveyed capacity is capped at the bank crest", () => {
+test("a discharge exceeding surveyed channel capacity is rejected instead of silently capped", () => {
   const channel = {
     points: [
       { station: -5, elevation: 2 }, { station: -1, elevation: 0 },
@@ -355,8 +358,7 @@ test("a discharge exceeding the natural channel's surveyed capacity is capped at
     ],
     manningN: 0.03, slope: 0.005,
   };
-  const depth = solveNaturalChannelDepth(1e6, channel);
-  assert.ok(Math.abs(depth - 2) < 1e-9);
+  assert.throws(() => solveNaturalChannelDepth(1e6, channel), /exceeds the surveyed channel capacity/);
 });
 
 test("runCulvertHydrograph runs one calculation per row and finds the peak", () => {
@@ -391,4 +393,81 @@ test("runCulvertHydrograph marks an invalid row's error without failing the whol
   assert.ok(hydrograph.rows[1].error.length > 0);
   assert.equal(hydrograph.rows[1].result, null);
   assert.equal(hydrograph.peakIndex, 0);
+});
+
+
+test("receiving channel level is converted to depth above the outlet invert", () => {
+  // Rectangular channel B=2, y=1: A=2, P=4, R=0.5.
+  const channel = { base: 2, manningN: 0.03, slope: 0.005 };
+  const q = 2 * 0.5 ** (2/3) * Math.sqrt(0.005) / 0.03;
+  const rated = inputForDischarge(circular, q, { kind: "rectangular", channel, bedLevel: 99.5 });
+  // Outlet invert = 100 - 30*0.01 = 99.7. Water level = 99.5+1 =100.5.
+  assert.ok(Math.abs(rated.tailwaterDepth - 0.8) < 1e-7);
+  const shifted = inputForDischarge({ ...circular, inletInvertLevel: 300 }, q, { kind: "rectangular", channel, bedLevel: 299.5 });
+  assert.ok(Math.abs(shifted.tailwaterDepth - rated.tailwaterDepth) < 1e-7);
+});
+
+test("natural-channel elevations retain their datum and use total flow across barrels", () => {
+  const channel = { points: [{station:-5,elevation:102},{station:-1,elevation:100},{station:1,elevation:100},{station:5,elevation:102}], manningN:0.03,slope:0.005 };
+  const depth = solveTrapezoidalChannelDepth(3, {base:2,sideSlope:2,manningN:0.03,slope:0.005});
+  const input = inputForDischarge({...circular,barrels:2},3,{kind:"natural",channel});
+  assert.ok(Math.abs(input.tailwaterDepth - (depth + 0.3)) < 1e-7);
+  const translated = inputForDischarge({...circular,inletInvertLevel:0},3,{kind:"natural",channel:{...channel,points:channel.points.map(p=>({...p,elevation:p.elevation-100}))}});
+  assert.ok(Math.abs(input.tailwaterDepth-translated.tailwaterDepth)<1e-7);
+});
+
+test("channel tailwater is recomputed at each hydrograph flow and retained with its result", () => {
+  const tailwater = {kind:"rectangular",bedLevel:99.7,channel:{base:2,manningN:0.03,slope:0.005}};
+  const batch = runCulvertHydrograph(circular,[{time:0,discharge:0.5},{time:30,discharge:2}],tailwater);
+  assert.ok(batch.rows[1].input.tailwaterDepth > batch.rows[0].input.tailwaterDepth);
+  for(const row of batch.rows) {
+    const expected = solveRectangularChannelDepth(row.discharge,tailwater.channel);
+    assert.ok(Math.abs(row.input.tailwaterDepth-expected)<1e-7);
+    assert.deepEqual(row.result,calculateCulvert(row.input));
+  }
+});
+
+test("fixed tailwater stays fixed and invalid channel configuration does not fall back", () => {
+  const rows=[{time:0,discharge:0.5},{time:30,discharge:2}];
+  const fixed=runCulvertHydrograph(circular,rows,{kind:"direct",depth:0.8});
+  assert.ok(fixed.rows.every(row=>row.input.tailwaterDepth===0.8));
+  const invalid=runCulvertHydrograph(circular,rows,{kind:"rectangular",bedLevel:99.7,channel:{base:0,manningN:0.03,slope:0.005}});
+  assert.equal(invalid.peakIndex,null);
+  assert.ok(invalid.rows.every(row=>row.result===null && row.input===null && row.error));
+});
+
+test("calibration curve includes 21 equally spaced flows and the governing envelope", () => {
+  const rows=calculateRatingCurve(circular,0.5,4.5,{kind:"direct",depth:0.5});
+  assert.equal(rows.length,21); assert.equal(rows[0].discharge,0.5); assert.equal(rows.at(-1).discharge,4.5);
+  for(const [i,row] of rows.entries()) {
+    assert.ok(Math.abs(row.discharge-(0.5+i*0.2))<1e-10);
+    assert.equal(row.result.governingHeadwaterDepth,Math.max(row.result.inletControl.headwaterDepth,row.result.outletControl.headwaterDepth));
+  }
+  assert.throws(()=>calculateRatingCurve(circular,2,1),/Maximum/);
+  assert.throws(()=>calculateRatingCurve(circular,0,1),/Minimum/);
+});
+
+test("profile table satisfies the energy and Manning identities and omits display extensions", () => {
+  const profile=traceStandardStepProfile(circular,solveNormalDepth(circular),"downstream","supercritical");
+  const rows=profileCalculationRows(circular,profile);
+  for(const row of rows) {
+    assert.ok(Math.abs(row.energyLevel-row.waterSurfaceElevation-row.velocity**2/(2*9.80665))<1e-10);
+    assert.ok(Math.abs(row.frictionSlope-circular.slope)<1e-6);
+  }
+  const synthetic={...profile,reachedFull:true,stations:[...profile.stations,{...profile.stations.at(-1),x:999}]};
+  assert.equal(profileCalculationRows(circular,synthetic).length,profile.stations.length);
+  assert.ok(profileCalculationRows(circular,synthetic).every(row=>row.x!==999));
+});
+
+test("natural-channel input errors and insufficient surveyed bank heights are rejected", () => {
+ const channel={points:[{station:-5,elevation:1},{station:-1,elevation:0},{station:1,elevation:0},{station:5,elevation:3}],manningN:0.03,slope:0.005};
+ assert.throws(()=>solveNaturalChannelDepth(100,channel),/exceeds/);
+ assert.throws(()=>solveNaturalChannelDepth(1,{...channel,points:[{station:NaN,elevation:2},{station:1,elevation:0}]}),/finite/);
+ assert.throws(()=>solveNaturalChannelDepth(1,{...channel,points:[{station:0,elevation:2},{station:0,elevation:0},{station:5,elevation:2}]}),/unique/);
+});
+
+test("inlet predictions below critical depth flag equation/coefficient review", () => {
+  const result = calculateCulvert(circular);
+  assert.ok(result.inletControl.headwaterDepth < result.criticalDepth);
+  assert.ok(result.warnings.some(warning => warning.includes("equation form")));
 });

@@ -39,3 +39,6 @@ jobs:
 
       - name: Test tool request email route
         run: node --experimental-strip-types --test tests/tool-requests.test.mjs
+
+      - name: Test culvert hydraulics
+        run: node --experimental-strip-types --test tests/culvert-engine.test.mjs
