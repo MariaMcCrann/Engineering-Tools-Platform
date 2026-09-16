@@ -16,10 +16,11 @@ import { RorbMedianFlowTool } from "./RorbMedianFlowTool";
 import { BroadCrestedWeirTool } from "./BroadCrestedWeirTool";
 import { DrownedSluiceGateTool } from "./DrownedSluiceGateTool";
 import { ThrustAtBendsTool } from "./ThrustAtBendsTool";
+import { BuriedFlexiblePipeTool } from "./BuriedFlexiblePipeTool";
 import { EngineeringDashboard, DashboardCategory, DashboardTool, HANDBOOK_ITEMS } from "./EngineeringDashboard";
 import { SavedProjectsPanel, SaveProjectControl, CalculationTemplatesPanel, SavedProject, loadSavedProjects, persistSavedProjects } from "./WorkspacePanels";
 
-type ViewKey = "tools" | "saved-projects" | "templates" | "rorb" | "rational" | "channel" | "storage" | "overland" | "rising" | "gsdm" | "spillway" | "culvert" | "headloss" | "pipe-sizing" | "pipeline-hgl" | "rock-protection" | "headwall-concrete" | "base-slab-concrete" | "broad-crested-weir" | "drowned-sluice-gate" | "thrust-at-bends" | "proposal" | "site-intelligence";
+type ViewKey = "tools" | "saved-projects" | "templates" | "rorb" | "rational" | "channel" | "storage" | "overland" | "rising" | "gsdm" | "spillway" | "culvert" | "headloss" | "pipe-sizing" | "pipeline-hgl" | "rock-protection" | "headwall-concrete" | "base-slab-concrete" | "broad-crested-weir" | "drowned-sluice-gate" | "thrust-at-bends" | "buried-flexible-pipe" | "proposal" | "site-intelligence";
 type ToolEntry = DashboardTool & { view: Exclude<ViewKey, "tools" | "saved-projects" | "templates"> };
 
 const TOOL_CATEGORIES: DashboardCategory[] = [
@@ -45,6 +46,7 @@ const TOOL_CATEGORIES: DashboardCategory[] = [
   { key: "structures", label: "Structures", description: "Concrete headwalls, slabs and structural checks.", icon: "▥", tools: [
     { view: "headwall-concrete", icon: "HW", label: "Headwall Concrete", desc: "AS 3600 headwall bending, minimum steel and shear screening checks." },
     { view: "base-slab-concrete", icon: "BS", label: "Base Slab Concrete", desc: "AS 3600 reinforced base-slab design checks from the supplied workbook." },
+    { view: "buried-flexible-pipe", icon: "FP", label: "Buried Flexible Pipe", desc: "AS2566.1 deflection, strength and buckling checks for buried flexible pipe." },
   ]},
   { key: "storage", label: "Storage & Dams", description: "Stage-storage, detention and dam-related calculations.", icon: "▤", tools: [
     { view: "storage", icon: "SS", label: "Stage Storage", desc: "Stage-storage calculations and outputs." },
@@ -110,6 +112,7 @@ export default function Home() {
     : view === "broad-crested-weir" ? <>{toolHeader("Broad Crested Weir", "broad-crested-weir")}<BroadCrestedWeirTool/></>
     : view === "drowned-sluice-gate" ? <>{toolHeader("Drowned Sluice Gate", "drowned-sluice-gate")}<DrownedSluiceGateTool/></>
     : view === "thrust-at-bends" ? <>{toolHeader("Thrust at Bends", "thrust-at-bends")}<ThrustAtBendsTool/></>
+    : view === "buried-flexible-pipe" ? <>{toolHeader("Buried Flexible Pipe", "buried-flexible-pipe")}<BuriedFlexiblePipeTool/></>
     : view === "proposal" ? <>{toolHeader("Proposal Tool", "proposal")}<ProposalTool/></> : null;
 
   return <main className="app-shell">
