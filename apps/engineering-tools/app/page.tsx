@@ -15,10 +15,11 @@ import { HeadwallStructuralTool, BaseSlabStructuralTool } from "./StructuralConc
 import { RorbMedianFlowTool } from "./RorbMedianFlowTool";
 import { BroadCrestedWeirTool } from "./BroadCrestedWeirTool";
 import { DrownedSluiceGateTool } from "./DrownedSluiceGateTool";
+import { ThrustAtBendsTool } from "./ThrustAtBendsTool";
 import { EngineeringDashboard, DashboardCategory, DashboardTool, HANDBOOK_ITEMS } from "./EngineeringDashboard";
 import { SavedProjectsPanel, SaveProjectControl, CalculationTemplatesPanel, SavedProject, loadSavedProjects, persistSavedProjects } from "./WorkspacePanels";
 
-type ViewKey = "tools" | "saved-projects" | "templates" | "rorb" | "rational" | "channel" | "storage" | "overland" | "rising" | "gsdm" | "spillway" | "culvert" | "headloss" | "pipe-sizing" | "pipeline-hgl" | "rock-protection" | "headwall-concrete" | "base-slab-concrete" | "broad-crested-weir" | "drowned-sluice-gate" | "proposal" | "site-intelligence";
+type ViewKey = "tools" | "saved-projects" | "templates" | "rorb" | "rational" | "channel" | "storage" | "overland" | "rising" | "gsdm" | "spillway" | "culvert" | "headloss" | "pipe-sizing" | "pipeline-hgl" | "rock-protection" | "headwall-concrete" | "base-slab-concrete" | "broad-crested-weir" | "drowned-sluice-gate" | "thrust-at-bends" | "proposal" | "site-intelligence";
 type ToolEntry = DashboardTool & { view: Exclude<ViewKey, "tools" | "saved-projects" | "templates"> };
 
 const TOOL_CATEGORIES: DashboardCategory[] = [
@@ -39,6 +40,7 @@ const TOOL_CATEGORIES: DashboardCategory[] = [
     { view: "spillway", icon: "SP", label: "Spillway", desc: "Weir flow, chute hydraulics and stilling-basin checks." },
     { view: "broad-crested-weir", icon: "BW", label: "Broad Crested Weir", desc: "Open channel discharge via a broad crested weir, per AS3778.4.2." },
     { view: "drowned-sluice-gate", icon: "SG", label: "Drowned Sluice Gate", desc: "Discharge rate through a drowned sluice gate for free flow." },
+    { view: "thrust-at-bends", icon: "TB", label: "Thrust at Bends", desc: "Momentum and pressure thrust for anchorage design at pipeline bends." },
   ]},
   { key: "structures", label: "Structures", description: "Concrete headwalls, slabs and structural checks.", icon: "▥", tools: [
     { view: "headwall-concrete", icon: "HW", label: "Headwall Concrete", desc: "AS 3600 headwall bending, minimum steel and shear screening checks." },
@@ -107,6 +109,7 @@ export default function Home() {
     : view === "culvert" ? <>{toolHeader("Culvert", "culvert")}<CulvertTool/></>
     : view === "broad-crested-weir" ? <>{toolHeader("Broad Crested Weir", "broad-crested-weir")}<BroadCrestedWeirTool/></>
     : view === "drowned-sluice-gate" ? <>{toolHeader("Drowned Sluice Gate", "drowned-sluice-gate")}<DrownedSluiceGateTool/></>
+    : view === "thrust-at-bends" ? <>{toolHeader("Thrust at Bends", "thrust-at-bends")}<ThrustAtBendsTool/></>
     : view === "proposal" ? <>{toolHeader("Proposal Tool", "proposal")}<ProposalTool/></> : null;
 
   return <main className="app-shell">
