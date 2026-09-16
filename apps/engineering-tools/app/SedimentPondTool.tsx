@@ -17,13 +17,39 @@ const SEDIMENT_TARGETS: { label: string; vs: number }[] = [
 
 // Hydraulic efficiency, λ, by pond/wetland configuration (Fig 10.5, Australian Runoff Quality, 2003).
 // good ≥ 0.70; satisfactory 0.5–0.70; poor ≤ 0.5.
-const POND_SHAPE_FACTORS: { label: string; lambda: number }[] = [
-  { label: "A", lambda: 0.30 }, { label: "B", lambda: 0.26 }, { label: "C", lambda: 0.11 }, { label: "D", lambda: 0.18 },
-  { label: "E", lambda: 0.76 }, { label: "G", lambda: 0.76 }, { label: "H", lambda: 0.11 }, { label: "I", lambda: 0.41 },
-  { label: "J", lambda: 0.90 }, { label: "K", lambda: 0.36 }, { label: "O", lambda: 0.26 }, { label: "P", lambda: 0.61 },
-  { label: "Q", lambda: 0.59 }
+// Pictograms are simplified illustrations of each configuration's general arrangement, not a
+// traced reproduction of the source figure — cross-check the published figure for shape selection.
+type PondVariant = "simple" | "short" | "tapered" | "distributed" | "baffled" | "offset" | "elongated" | "bent" | "island" | "diffuser" | "curtain";
+const POND_SHAPE_FACTORS: { label: string; lambda: number; variant: PondVariant }[] = [
+  { label: "A", lambda: 0.30, variant: "simple" }, { label: "B", lambda: 0.26, variant: "simple" },
+  { label: "C", lambda: 0.11, variant: "short" }, { label: "D", lambda: 0.18, variant: "tapered" },
+  { label: "E", lambda: 0.76, variant: "distributed" }, { label: "G", lambda: 0.76, variant: "baffled" },
+  { label: "H", lambda: 0.11, variant: "short" }, { label: "I", lambda: 0.41, variant: "offset" },
+  { label: "J", lambda: 0.90, variant: "elongated" }, { label: "K", lambda: 0.36, variant: "bent" },
+  { label: "O", lambda: 0.26, variant: "island" }, { label: "P", lambda: 0.61, variant: "diffuser" },
+  { label: "Q", lambda: 0.59, variant: "curtain" }
 ];
 const lambdaBand = (l: number) => (l > 0.70 ? "good" : l > 0.5 ? "satisfactory" : "poor");
+
+function PondShapeIcon({ variant }: { variant: PondVariant }) {
+  const inlet = <line x1="2" y1="20" x2="12" y2="20" stroke="#365b91" strokeWidth="2" markerEnd="url(#pond-arrow)" />;
+  const outlet = <line x1="58" y1="20" x2="68" y2="20" stroke="#365b91" strokeWidth="2" markerEnd="url(#pond-arrow)" />;
+  const box = (x2 = 58) => <rect x="12" y="8" width={x2 - 12} height="24" fill="#eef3f8" stroke="#456b99" strokeWidth="1.5" />;
+  return <svg viewBox="0 0 70 40" width="70" height="40">
+    <defs><marker id="pond-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0 0L10 5L0 10z" fill="#365b91" /></marker></defs>
+    {variant === "simple" && <>{box()}{inlet}{outlet}</>}
+    {variant === "short" && <>{box(40)}<line x1="2" y1="20" x2="12" y2="20" stroke="#365b91" strokeWidth="2" markerEnd="url(#pond-arrow)" /><line x1="40" y1="20" x2="50" y2="20" stroke="#365b91" strokeWidth="2" markerEnd="url(#pond-arrow)" /></>}
+    {variant === "tapered" && <><path d="M12 8H58L48 32H12Z" fill="#eef3f8" stroke="#456b99" strokeWidth="1.5" />{inlet}<line x1="48" y1="20" x2="66" y2="20" stroke="#365b91" strokeWidth="2" markerEnd="url(#pond-arrow)" /></>}
+    {variant === "distributed" && <>{box()}<line x1="2" y1="12" x2="12" y2="12" stroke="#365b91" strokeWidth="1.5" markerEnd="url(#pond-arrow)" /><line x1="2" y1="20" x2="12" y2="20" stroke="#365b91" strokeWidth="1.5" markerEnd="url(#pond-arrow)" /><line x1="2" y1="28" x2="12" y2="28" stroke="#365b91" strokeWidth="1.5" markerEnd="url(#pond-arrow)" />{outlet}</>}
+    {variant === "baffled" && <>{box()}<path d="M28 8V26M42 14V32" fill="none" stroke="#456b99" strokeWidth="2" />{inlet}{outlet}</>}
+    {variant === "offset" && <>{box()}<line x1="2" y1="12" x2="12" y2="12" stroke="#365b91" strokeWidth="2" markerEnd="url(#pond-arrow)" /><line x1="58" y1="28" x2="68" y2="28" stroke="#365b91" strokeWidth="2" markerEnd="url(#pond-arrow)" /></>}
+    {variant === "elongated" && <>{box(66)}<line x1="2" y1="20" x2="12" y2="20" stroke="#365b91" strokeWidth="2" markerEnd="url(#pond-arrow)" /><line x1="66" y1="20" x2="68" y2="20" stroke="#365b91" strokeWidth="2" markerEnd="url(#pond-arrow)" /></>}
+    {variant === "bent" && <><path d="M12 8H42V20H58V32H12Z" fill="#eef3f8" stroke="#456b99" strokeWidth="1.5" />{inlet}<line x1="58" y1="26" x2="68" y2="26" stroke="#365b91" strokeWidth="2" markerEnd="url(#pond-arrow)" /></>}
+    {variant === "island" && <>{box()}<circle cx="24" cy="20" r="4" fill="#fff" stroke="#456b99" strokeWidth="1.5" />{inlet}{outlet}</>}
+    {variant === "diffuser" && <>{box()}<circle cx="20" cy="20" r="5" fill="none" stroke="#456b99" strokeWidth="1.5" />{inlet}{outlet}</>}
+    {variant === "curtain" && <>{box()}<line x1="46" y1="9" x2="46" y2="31" stroke="#456b99" strokeWidth="3" strokeDasharray="2 2" />{inlet}{outlet}</>}
+  </svg>;
+}
 
 type StageRow = { stage: number; storage: number; area: number; length: number; width: number };
 function buildStageStorage(bottomLength: number, bottomWidth: number, sideSlope: number, maxStage: number, increment: number): StageRow[] {
@@ -210,8 +236,8 @@ export function SedimentPondTool() {
       </div>
       <section className="roughness-reference">
         <div className="reference-head"><div><p className="eyebrow">REFERENCE TABLE</p><h2>Hydraulic efficiency, λ, by pond configuration</h2><span>Fig 10.5, Australian Runoff Quality (2003). Range 0–1; 1 = best hydrodynamic conditions.</span></div></div>
-        <div className="reference-table"><table><thead><tr><th>Configuration</th><th>λ</th><th>Efficiency</th><th></th></tr></thead><tbody>{POND_SHAPE_FACTORS.map((s) => <tr key={s.label}><td>{s.label}</td><td>{fmt(s.lambda, 2)}</td><td>{lambdaBand(s.lambda)}</td><td><button type="button" onClick={() => setShapeFactor(String(s.lambda))}>Use value</button></td></tr>)}</tbody></table></div>
-        <p className="engine-note">λ = (1 − 1/N) = (t<sub>mean</sub>/t<sub>n</sub>)(1 − (t<sub>mean</sub>−t<sub>p</sub>)/t<sub>mean</sub>) = t<sub>p</sub>/t<sub>n</sub>. Good hydraulic efficiency: λ &gt; 0.70; satisfactory: 0.5 &lt; λ ≤ 0.70; poor: λ ≤ 0.5.</p>
+        <div className="reference-table"><table><thead><tr><th>Configuration</th><th>Schematic</th><th>λ</th><th>Efficiency</th><th></th></tr></thead><tbody>{POND_SHAPE_FACTORS.map((s) => <tr key={s.label}><td>{s.label}</td><td><PondShapeIcon variant={s.variant} /></td><td>{fmt(s.lambda, 2)}</td><td>{lambdaBand(s.lambda)}</td><td><button type="button" onClick={() => setShapeFactor(String(s.lambda))}>Use value</button></td></tr>)}</tbody></table></div>
+        <p className="engine-note">λ = (1 − 1/N) = (t<sub>mean</sub>/t<sub>n</sub>)(1 − (t<sub>mean</sub>−t<sub>p</sub>)/t<sub>mean</sub>) = t<sub>p</sub>/t<sub>n</sub>. Good hydraulic efficiency: λ &gt; 0.70; satisfactory: 0.5 &lt; λ ≤ 0.70; poor: λ ≤ 0.5. Schematics are simplified illustrations of each configuration&apos;s general arrangement (inlet/outlet position, baffling), not a traced reproduction — confirm against Australian Runoff Quality (2003) Fig 10.5 before final shape selection.</p>
       </section></Section>
       <Section number={3} title="Cleanout and dewatering"><div className="calc-fields">
         <Field label="Contributing catchment area, Ca" value={catchmentArea} unit="ha" onChange={setCatchmentArea} />
