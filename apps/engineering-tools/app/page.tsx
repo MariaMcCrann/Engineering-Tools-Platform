@@ -20,10 +20,11 @@ import { BuriedFlexiblePipeTool } from "./BuriedFlexiblePipeTool";
 import { VNotchWeirTool } from "./VNotchWeirTool";
 import { PitSurgeTool } from "./PitSurgeTool";
 import { PumpDutyPointTool } from "./PumpDutyPointTool";
+import { CantileverWallTool } from "./CantileverWallTool";
 import { EngineeringDashboard, DashboardCategory, DashboardTool, HANDBOOK_ITEMS } from "./EngineeringDashboard";
 import { SavedProjectsPanel, SaveProjectControl, CalculationTemplatesPanel, SavedProject, loadSavedProjects, persistSavedProjects } from "./WorkspacePanels";
 
-type ViewKey = "tools" | "saved-projects" | "templates" | "rorb" | "rational" | "channel" | "storage" | "overland" | "rising" | "gsdm" | "spillway" | "culvert" | "headloss" | "pipe-sizing" | "pipeline-hgl" | "rock-protection" | "headwall-concrete" | "base-slab-concrete" | "broad-crested-weir" | "drowned-sluice-gate" | "thrust-at-bends" | "buried-flexible-pipe" | "v-notch-weir" | "pit-surge" | "pump-duty-point" | "proposal" | "site-intelligence";
+type ViewKey = "tools" | "saved-projects" | "templates" | "rorb" | "rational" | "channel" | "storage" | "overland" | "rising" | "gsdm" | "spillway" | "culvert" | "headloss" | "pipe-sizing" | "pipeline-hgl" | "rock-protection" | "headwall-concrete" | "base-slab-concrete" | "broad-crested-weir" | "drowned-sluice-gate" | "thrust-at-bends" | "buried-flexible-pipe" | "v-notch-weir" | "pit-surge" | "pump-duty-point" | "cantilever-wall" | "proposal" | "site-intelligence";
 type ToolEntry = DashboardTool & { view: Exclude<ViewKey, "tools" | "saved-projects" | "templates"> };
 
 const TOOL_CATEGORIES: DashboardCategory[] = [
@@ -53,6 +54,7 @@ const TOOL_CATEGORIES: DashboardCategory[] = [
     { view: "headwall-concrete", icon: "HW", label: "Headwall Concrete", desc: "AS 3600 headwall bending, minimum steel and shear screening checks." },
     { view: "base-slab-concrete", icon: "BS", label: "Base Slab Concrete", desc: "AS 3600 reinforced base-slab design checks from the supplied workbook." },
     { view: "buried-flexible-pipe", icon: "FP", label: "Buried Flexible Pipe", desc: "AS2566.1 deflection, strength and buckling checks for buried flexible pipe." },
+    { view: "cantilever-wall", icon: "CW", label: "Cantilever Wall", desc: "AS3600 design of a free-standing cantilever retaining wall." },
   ]},
   { key: "storage", label: "Storage & Dams", description: "Stage-storage, detention and dam-related calculations.", icon: "▤", tools: [
     { view: "storage", icon: "SS", label: "Stage Storage", desc: "Stage-storage calculations and outputs." },
@@ -124,6 +126,7 @@ export default function Home() {
     : view === "v-notch-weir" ? <>{toolHeader("V-Notch Weir", "v-notch-weir")}<VNotchWeirTool/></>
     : view === "pit-surge" ? <>{toolHeader("Pit Surge", "pit-surge")}<PitSurgeTool/></>
     : view === "pump-duty-point" ? <>{toolHeader("Pump Duty Point", "pump-duty-point")}<PumpDutyPointTool/></>
+    : view === "cantilever-wall" ? <>{toolHeader("Cantilever Wall", "cantilever-wall")}<CantileverWallTool/></>
     : view === "proposal" ? <>{toolHeader("Proposal Tool", "proposal")}<ProposalTool/></> : null;
 
   return <main className="app-shell">
