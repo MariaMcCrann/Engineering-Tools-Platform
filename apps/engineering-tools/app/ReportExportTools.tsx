@@ -41,7 +41,7 @@ async function exportExcel(){
 
 export default function ReportExportTools(){
   const [mode,setMode]=useState<"none"|"pdf"|"both">("none");
-  useEffect(()=>{const check=()=>{const title=document.querySelector("h1")?.textContent?.trim()||"";const structural=STRUCTURAL_TITLES.has(title);const csv=[...document.querySelectorAll("button")].filter(b=>/export.*csv/i.test(b.textContent||"")) as HTMLElement[];csv.forEach(b=>b.style.display="none");setMode(structural?"pdf":csv.length?"both":"none")};check();const o=new MutationObserver(check);o.observe(document.body,{subtree:true,childList:true});return()=>o.disconnect()},[]);
+  useEffect(()=>{const check=()=>{const title=document.querySelector("h1")?.textContent?.trim()||"";const structural=STRUCTURAL_TITLES.has(title);const csv=[...document.querySelectorAll("button")].filter(b=>/export.*csv/i.test(b.textContent||"")) as HTMLElement[];csv.forEach(b=>{if(!b.hasAttribute("data-keep-csv"))b.style.display="none"});setMode(structural?"pdf":csv.length?"both":"none")};check();const o=new MutationObserver(check);o.observe(document.body,{subtree:true,childList:true});return()=>o.disconnect()},[]);
   if(mode==="none")return null;
   return <div className="report-export-tools"><button onClick={exportPdf}>↓ Export PDF</button>{mode==="both"&&<button onClick={exportExcel}>↓ Export Excel</button>}</div>;
 }
