@@ -303,7 +303,10 @@ function ProfileChart({
   const tailwaterLevel = outletLevel + tailwaterDepth;
   const invertAt = (x: number) => inletLevel - slope * x;
 
+  // Diagram-only formation: no road crest level or overtopping is calculated.
+  const formationCover = height * 0.35;
   const elevations = [
+    inletLevel + height + formationCover,
     inletLevel, outletLevel, inletLevel + height, outletLevel + height,
     invertAt(0) + criticalDepth, invertAt(length) + criticalDepth,
     invertAt(0) + normalDepth, invertAt(length) + normalDepth,
@@ -324,18 +327,14 @@ function ProfileChart({
 
   return (
     <div className="profile-chart">
-      <svg viewBox={`0 0 ${width} ${viewHeight}`} preserveAspectRatio="xMidYMid meet">
-        <defs>
-          <pattern id="culvert-ground-hatch" width="7" height="7" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
-            <rect x="0" y="0" width="7" height="7" className="profile-hatch-bg" />
-            <line x1="0" y1="0" x2="0" y2="7" className="profile-hatch-line" />
-          </pattern>
-        </defs>
-
-        <polygon
-          className="profile-ground"
-          points={`${leftPad},${yScale(invertAt(0))} ${width - rightPad},${yScale(invertAt(length))} ${width - rightPad},${viewHeight} ${leftPad},${viewHeight}`}
+      <svg viewBox={`0 0 ${width} ${viewHeight}`} preserveAspectRatio="xMidYMid meet" role="img" aria-label="Culvert water-surface profile with schematic road formation">
+        <polyline
+          className="profile-road-formation"
+          points={`${xScale(0)},${yScale(invertAt(0) + height)} ${xScale(length * 0.14)},${yScale(invertAt(length * 0.14) + height + formationCover)} ${xScale(length * 0.93)},${yScale(invertAt(length * 0.93) + height + formationCover)} ${xScale(length)},${yScale(invertAt(length) + height)}`}
         />
+        <text className="profile-road-label" textAnchor="middle" x={xScale(length * 0.5)} y={yScale(invertAt(length * 0.5) + height + formationCover) - 12}>
+          Road formation
+        </text>
 
         <rect
           className="profile-pool"
@@ -427,6 +426,7 @@ function ProfileChart({
           </>
         )}
       </svg>
+      <p className="engine-note">Road formation is schematic; road levels and overtopping are not calculated.</p>
       <div className="profile-legend">
         {profiles.map((profile) => (
           <span key={profile.regime}><i className={`profile-swatch ${profile.regime}`} />{REGIME_LABELS[profile.regime]} profile</span>

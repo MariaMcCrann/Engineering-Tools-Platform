@@ -152,10 +152,9 @@ td small { color:#96a0ad; font-weight:400; }
 .entrance-coefficients{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-top:14px;padding:12px 14px;background:#f7f9fc;border:1px solid var(--line);border-radius:8px}.entrance-coefficients .metric{border-bottom:0;padding:0;flex-direction:column;gap:3px}.entrance-coefficients .metric span{font-size:10px;text-transform:uppercase;letter-spacing:.04em}.entrance-coefficients .metric strong{font-size:14px}
 .control-comparison{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}.control-comparison>div{padding:11px 12px;border:1px solid #dfe5ed;border-radius:8px;background:#f9fafc}.control-comparison>div.governs{border-color:#365b91;background:#eef4fa}.control-comparison span{display:block;font-size:10px;color:#748397;text-transform:uppercase;letter-spacing:.03em}.control-comparison strong{display:block;margin-top:3px;font-size:15px;color:#2f4d74}.control-comparison small{display:block;margin-top:2px;color:#8b98a8;text-transform:capitalize}
 .auto-size-summary{margin-bottom:14px;padding:11px 12px;border:1px solid #365b91;border-radius:8px;background:#eef4fa}.auto-size-summary span{display:block;font-size:10px;color:#748397;text-transform:uppercase;letter-spacing:.03em}.auto-size-summary strong{display:block;margin-top:3px;font-size:16px;color:#2f4d74}.auto-size-summary small{display:block;margin-top:3px;font-size:11px;font-weight:700}.auto-size-summary small.pass{color:#246b50}.auto-size-summary small.fail{color:#a74545}
-.profile-chart{margin-top:14px;padding:13px 12px 8px;background:#fbf8f1;border:1px solid #dce2e8;border-radius:9px}.profile-chart svg{display:block;width:100%;height:auto;max-height:340px}
-.profile-hatch-bg{fill:#f1e8d6}
-.profile-hatch-line{stroke:#c9b899;stroke-width:1.4}
-.profile-ground{fill:url(#culvert-ground-hatch);stroke:none}
+.profile-chart{margin-top:14px;padding:13px 12px 8px;background:#fff;border:1px solid #dce2e8;border-radius:9px}.profile-chart svg{display:block;width:100%;height:auto;max-height:340px}
+.profile-road-formation{fill:none;stroke:#126987;stroke-width:2;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+.profile-road-label{fill:#126987;font-size:12px;font-weight:600}
 .profile-pool{fill:#365b91;fill-opacity:.12;stroke:none}
 .profile-waterline{stroke:#365b91;stroke-width:1.4;vector-effect:non-scaling-stroke}
 .profile-water-marker{fill:#365b91}
