@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 export const runtime = "nodejs";
 
-const recipient = "maria.mccrann@floodriskadvisory.com.au";
+const recipient = "maria.mccrann@gmwater.com.au";
 const maxBytes = 24_000;
 // A conservative per-instance cap; shared across visitors, without trusting IP headers.
 let windowStart = 0;
@@ -58,7 +58,7 @@ export async function POST(request: Request) {
   const apiKey = process.env.RESEND_API_KEY?.trim();
   const from = process.env.TOOL_REQUEST_FROM_EMAIL?.trim();
   if (!apiKey || !from) {
-    return error("Request email is not available yet. Please email maria.mccrann@floodriskadvisory.com.au directly.", 503);
+    return error("Request email is not available yet. Please email maria.mccrann@gmwater.com.au directly.", 503);
   }
   const now = Date.now();
   if (now - windowStart >= 60_000) { windowStart = now; attempts = 0; }
@@ -80,7 +80,7 @@ export async function POST(request: Request) {
     });
     if (!response.ok) {
       console.error("Tool request email rejected", { status: response.status });
-      return error("We could not send your request. Please try again shortly, or email maria.mccrann@floodriskadvisory.com.au.", 502);
+      return error("We could not send your request. Please try again shortly, or email maria.mccrann@gmwater.com.au.", 502);
     }
     const result: unknown = await response.json();
     if (!result || typeof result !== "object" || !("id" in result) || typeof result.id !== "string" || !result.id) {
@@ -88,6 +88,6 @@ export async function POST(request: Request) {
     }
     return Response.json({ ok: true });
   } catch {
-    return error("We could not confirm your request was sent. Please retry with the same text, or email maria.mccrann@floodriskadvisory.com.au.", 502);
+    return error("We could not confirm your request was sent. Please retry with the same text, or email maria.mccrann@gmwater.com.au.", 502);
   }
 }
