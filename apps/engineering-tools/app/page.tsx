@@ -70,11 +70,12 @@ const TOOL_CATEGORIES: DashboardCategory[] = [
     { view: "site-intelligence", icon: "GIS", label: "Project Site Intelligence", desc: "Screen a Victorian site against planning, cadastral and waterway open data.", externalUrl: "https://siteintelligence.floodriskadvisory.com.au" },
   ]},
   { key: "design-docs", label: "Design & Documentation", description: "Proposal, design checking, reporting and templates.", icon: "▤", tools: [
-    { view: "design-review", icon: "DR", label: "Design Review & Close-out", desc: "Discipline checklists, designer responses, review history and close-out reports.", badge: "New" },
     { view: "proposal", icon: "PT", label: "Proposal Tool", desc: "Prepare consistent consultancy proposals.", disabled: true },
   ]},
   { key: "utilities", label: "Utilities & Converters", description: "Small calculators, conversions and engineering helpers.", icon: "▦", tools: [] },
-  { key: "project-management", label: "Project Management", description: "Cost, planning and delivery support tools.", icon: "⚙", tools: [] },
+  { key: "project-management", label: "Project Management", description: "Design reviews, close-out, cost, planning and delivery support.", icon: "⚙", tools: [
+    { view: "design-review", icon: "DR", label: "Design Review & Close-out", desc: "Discipline checklists, designer responses, review history and close-out reports.", badge: "New" },
+  ]},
   { key: "ai-automation", label: "AI & Automation", description: "AI-assisted engineering and workflow automation.", icon: "✦", tools: [] },
 ];
 
