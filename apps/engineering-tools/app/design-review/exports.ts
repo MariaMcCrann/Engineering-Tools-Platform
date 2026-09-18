@@ -7,6 +7,14 @@ export function download(data: BlobPart, name: string, type: string) {
   setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
 export const filename = (r: Review) => `${r.metadata.project}-${r.id.slice(0, 8)}-review`.replace(/[^a-zA-Z0-9_-]/g, "_");
+const label = (key: string) => key.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, c => c.toUpperCase());
+export function readableDetail(detail: string): string {
+  try {
+    const value: unknown = JSON.parse(detail);
+    const lines = (v: unknown, indent = ""): string => v && typeof v === "object" ? Object.entries(v).map(([key, item]) => item && typeof item === "object" ? `${indent}${label(key)}:\n${lines(item, indent + "  ")}` : `${indent}${label(key)}: ${item === "" ? "Not supplied" : String(item)}`).join("\n") : String(v);
+    return lines(value);
+  } catch { return detail; }
+}
 export async function workbook(r: Review) {
   const { default: ExcelJS } = await import("exceljs");
   const wb = new ExcelJS.Workbook();
@@ -26,7 +34,7 @@ export async function workbook(r: Review) {
   r.items.forEach(c => c.history.forEach(e => history.addRow([c.id, e.round, e.at, e.actor.name, e.actor.role, e.from, e.to, e.text, e.evidence.reference, e.evidence.calculator ?? "", e.evidence.snapshot ? JSON.stringify(e.evidence.snapshot) : "", e.id])));
   const audit = wb.addWorksheet("Audit trail");
   audit.addRow(["Date (UTC)", "Name", "Role", "Action", "Details", "Event ID"]);
-  r.audit.forEach(e => audit.addRow([e.at, e.actor.name, e.actor.role, e.action, e.detail, e.id]));
+  r.audit.forEach(e => audit.addRow([e.at, e.actor.name, e.actor.role, e.action, readableDetail(e.detail), e.id]));
   wb.eachSheet(ws => {
     ws.views = [{ state: "frozen", ySplit: 1 }];
     ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: Math.max(1, ws.rowCount), column: ws.columnCount } };
@@ -48,7 +56,7 @@ export function reportLines(r: Review): { text: string; heading?: boolean }[] {
     { text: `${r.metadata.project} — ${r.metadata.title}`, heading: true },
     { text: `Review ${r.id} | ${r.closed ? "CLOSED" : r.items.length && r.items.every(c => TERMINAL.includes(c.status)) ? "OPEN — awaiting final reviewer close-out" : "OPEN — unresolved or unreviewed checks remain"}` },
     { text: `Completed checks: ${r.items.filter(c => TERMINAL.includes(c.status)).length} / ${r.items.length}` },
-    ...Object.entries(r.metadata).map(([key, value]) => ({ text: `${key}: ${value || "Not supplied"}` })),
+    ...Object.entries(r.metadata).map(([key, value]) => ({ text: `${label(key)}: ${value || "Not supplied"}` })),
     { text: "Record basis", heading: true },
     { text: "This report records review decisions; it is not an engineering certificate. Local workspace, self-declared identities; no authenticated signatures. Original source references and every response round are retained below." },
   ];
@@ -58,7 +66,7 @@ export function reportLines(r: Review): { text: string; heading?: boolean }[] {
     c.history.forEach(e => lines.push({ text: `Round ${e.round} | ${e.at} | ${e.actor.name} (${e.actor.role}) | ${e.from} → ${e.to}` }, { text: e.text }, { text: `Evidence: ${e.evidence.reference || "Not supplied"}${e.evidence.calculator ? ` | Calculator: ${e.evidence.calculator}` : ""}${e.evidence.snapshot ? ` | Snapshot: ${JSON.stringify(e.evidence.snapshot)}` : ""}` }));
   });
   lines.push({ text: "Audit trail", heading: true });
-  r.audit.forEach(e => lines.push({ text: `${e.at} | ${e.actor.name} (${e.actor.role}) | ${e.action}` }, { text: e.detail }));
+  r.audit.forEach(e => lines.push({ text: `${e.at} | ${e.actor.name} (${e.actor.role}) | ${e.action}` }, { text: readableDetail(e.detail) }, { text: `Audit event: ${e.id}` }));
   return lines;
 }
 const escape = (s: string) => s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" }[c]!)).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "");
