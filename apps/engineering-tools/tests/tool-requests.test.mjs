@@ -42,7 +42,7 @@ test("validates requests and handles provider success, failure and retry without
     assert.deepEqual(await response.json(), { ok: true });
     assert.equal(calls[0].url, "https://api.resend.com/emails");
     const payload = JSON.parse(calls[0].options.body);
-    assert.deepEqual(payload.to, ["maria.mccrann@floodriskadvisory.com.au"]);
+    assert.deepEqual(payload.to, ["maria.mccrann@gmwater.com.au"]);
     assert.equal(payload.html, undefined);
     assert.ok(payload.text.endsWith("<script>idea</script>"));
     await POST(request({ text: "<script>idea</script>", requestId: id }));
