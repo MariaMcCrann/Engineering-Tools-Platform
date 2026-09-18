@@ -9,6 +9,7 @@ import {
   CulvertInput,
   CulvertProfileResult,
   CulvertShape,
+  describeProfile,
   EntranceCategory,
   ENTRANCE_CATEGORY_LABELS,
   ENTRANCE_OPTIONS,
@@ -165,7 +166,7 @@ function runProfile(input: CulvertInput): { result: CulvertProfileResult | null;
 type TailwaterSource = "direct" | "rectangular" | "trapezoidal" | "natural";
 
 const TAILWATER_SOURCE_LABELS: Record<TailwaterSource, string> = {
-  direct: "Direct entry",
+  direct: "Known water level (fixed)",
   rectangular: "Rectangular channel",
   trapezoidal: "Trapezoidal channel",
   natural: "Natural channel (surveyed cross-section)",
@@ -265,6 +266,37 @@ function HydrographTable({
       </table>
       <button type="button" className="add-point-btn" onClick={addRow}>+ Add row</button>
     </div>
+  );
+}
+
+function HydrographChart({ rows }: { rows: HydrographRowInput[] }) {
+  const points = rows
+    .map((row) => ({ time: numberValue(row.time), discharge: numberValue(row.discharge) }))
+    .filter((point) => Number.isFinite(point.time) && Number.isFinite(point.discharge))
+    .sort((a, b) => a.time - b.time);
+  if (points.length < 2) return null;
+  const minTime = points[0].time;
+  const maxTime = points[points.length - 1].time;
+  const maxDischarge = Math.max(...points.map((point) => point.discharge), 0.001);
+  const x = (t: number) => 65 + ((t - minTime) / Math.max(maxTime - minTime, 1e-9)) * 605;
+  const y = (q: number) => 250 - (q / maxDischarge) * 200;
+  const path = points.map((point, index) => `${index === 0 ? "M" : "L"}${x(point.time)},${y(point.discharge)}`).join(" ");
+  return (
+    <svg viewBox="0 0 710 300" role="img" aria-label="Hydrograph: discharge against time" className="culvert-rating-chart">
+      {[0, 1, 2, 3, 4].map((tick) => (
+        <g key={tick}>
+          <line x1="65" y1={y((maxDischarge * tick) / 4)} x2="670" y2={y((maxDischarge * tick) / 4)} stroke="#e2e8f0" />
+          <text x="56" y={y((maxDischarge * tick) / 4) + 4} textAnchor="end">{((maxDischarge * tick) / 4).toFixed(2)}</text>
+          <text x={65 + (tick * 605) / 4} y="269" textAnchor="middle">{(minTime + ((maxTime - minTime) * tick) / 4).toFixed(0)}</text>
+        </g>
+      ))}
+      <line x1="65" y1="30" x2="65" y2="250" stroke="#64748b" />
+      <line x1="65" y1="250" x2="670" y2="250" stroke="#64748b" />
+      <text x="370" y="296" textAnchor="middle">Time (min)</text>
+      <text transform="translate(16 150) rotate(-90)" textAnchor="middle">Discharge (m³/s)</text>
+      <path d={path} stroke="#2563eb" strokeWidth="2.5" fill="none" />
+      {points.map((point, index) => <circle key={index} cx={x(point.time)} cy={y(point.discharge)} r="3" fill="#2563eb" />)}
+    </svg>
   );
 }
 
@@ -451,7 +483,7 @@ export function CulvertTool() {
   const [outletInvertLevel, setOutletInvertLevel] = useState("-0.3");
   const [roughness, setRoughness] = useState("0.013");
   const [discharge, setDischarge] = useState("2");
-  const [tailwaterDepth, setTailwaterDepth] = useState("0.5");
+  const [directWaterLevel, setDirectWaterLevel] = useState("0.2");
   const [entranceLoss, setEntranceLoss] = useState("0.2");
   const [outletLoss, setOutletLoss] = useState("1");
   const [invertLevel, setInvertLevel] = useState("0");
@@ -511,8 +543,11 @@ export function CulvertTool() {
     }
   };
 
+  const resolvedSlope = useInvertLevels ? (numberValue(invertLevel) - numberValue(outletInvertLevel)) / numberValue(length) : numberValue(slope);
+  const outletLevel = numberValue(invertLevel) - resolvedSlope * numberValue(length);
+
   const tailwater: TailwaterDefinition = tailwaterSource === "direct"
-    ? { kind: "direct", depth: numberValue(tailwaterDepth) }
+    ? { kind: "direct", depth: numberValue(directWaterLevel) - outletLevel }
     : tailwaterSource === "natural"
       ? { kind: "natural", channel: { points: naturalPoints.map((p) => ({ station: numberValue(p.station), elevation: numberValue(p.elevation) })), manningN: numberValue(channelManningN), slope: numberValue(channelSlope) } }
       : tailwaterSource === "rectangular"
@@ -526,10 +561,10 @@ export function CulvertTool() {
     height: numberValue(height),
     barrels: numberValue(barrels),
     length: numberValue(length),
-    slope: useInvertLevels ? (numberValue(invertLevel) - numberValue(outletInvertLevel)) / numberValue(length) : numberValue(slope),
+    slope: resolvedSlope,
     roughness: numberValue(roughness),
     discharge: numberValue(discharge),
-    tailwaterDepth: numberValue(tailwaterDepth),
+    tailwaterDepth: numberValue(directWaterLevel) - outletLevel,
     entranceLossCoefficient: numberValue(entranceLoss),
     outletLossCoefficient: numberValue(outletLoss),
     inletInvertLevel: numberValue(invertLevel),
@@ -580,6 +615,8 @@ export function CulvertTool() {
         : []),
       ["Selected total discharge", effectiveInput.discharge, "m3/s"],
       ["Tailwater above outlet invert", effectiveInput.tailwaterDepth, "m"],
+      ["Downstream water level", outletLevel + effectiveInput.tailwaterDepth, "m datum"],
+      ...(profile?.result ? [["Profile description", describeProfile(profile.result), "-"]] : []),
       ["Governing headwater", result.governingHeadwaterDepth, "m"],
       ["Governing control", result.governingControl === "inlet" ? "Inlet control" : "Outlet control", "-"],
       ["Inlet-control headwater", result.inletControl.headwaterDepth, "m"],
@@ -732,7 +769,10 @@ export function CulvertTool() {
               </button>
             </div>
             {dischargeMode === "hydrograph" && (
-              <HydrographTable rows={hydrographRows} onChange={setHydrographRows} />
+              <>
+                <HydrographTable rows={hydrographRows} onChange={setHydrographRows} />
+                <HydrographChart rows={hydrographRows} />
+              </>
             )}
             <div className="calc-fields">
               {dischargeMode === "constant" && (
@@ -748,7 +788,7 @@ export function CulvertTool() {
                 ))}
               </SelectField>
               {tailwaterSource === "direct" ? (
-                <Field label="Tailwater depth" value={tailwaterDepth} unit="m" onChange={setTailwaterDepth} />
+                <Field label="Downstream water level" value={directWaterLevel} unit="m datum" onChange={setDirectWaterLevel} />
               ) : (
                 <div className="calc-field">
                   <span>Tailwater above outlet invert (selected flow)</span>
@@ -842,6 +882,7 @@ export function CulvertTool() {
                   <span className="pass">{profile.result.slopeRegime} slope</span>
                   {profile.result.hydraulicJump && <span className="warn">! Hydraulic jump detected</span>}
                 </div>
+                <Metric name="Profile description" value={describeProfile(profile.result)} />
                 {profile.result.note && <p className="answer-note">{profile.result.note}</p>}
                 {profile.result.profiles.length > 0 && (
                   <ProfileChart
@@ -953,9 +994,12 @@ export function CulvertTool() {
               <Metric name="Normal depth" value={`${format(result.normalDepth)} m`} />
               <Metric name="Critical depth" value={`${format(result.criticalDepth)} m`} />
               <Metric name="Governing headwater level" value={`${format(result.governingHeadwaterLevel)} m`} />
+              <Metric name="Downstream (tailwater) depth" value={`${format(effectiveInput.tailwaterDepth)} m`} />
+              <Metric name="Downstream water level" value={`${format(outletLevel + effectiveInput.tailwaterDepth)} m`} />
               <Metric name="Velocity" value={`${format(result.upstreamVelocity)} m/s`} />
               <Metric name="Froude number" value={format(result.froudeNumber)} />
               <Metric name="Flow condition" value={result.flowCondition.replaceAll("-", " ")} />
+              {profile?.result && <Metric name="Profile description" value={describeProfile(profile.result)} />}
               {result.warnings.length > 0 && (
                 <div className="culvert-warnings">
                   <strong>Engineering review</strong>

@@ -63,7 +63,7 @@ export function EngineeringDashboard({ categories, onOpenTool, onOpenHandbook, o
       setRequestText("");
       submission.current = null;
     } catch {
-      setRequestError("We could not confirm your request was sent. Your text is still here; please retry, or email maria.mccrann@floodriskadvisory.com.au.");
+      setRequestError("We could not confirm your request was sent. Your text is still here; please retry, or email maria.mccrann@gmwater.com.au.");
     } finally {
       sending.current = false;
       setRequestSending(false);
@@ -114,7 +114,7 @@ export function EngineeringDashboard({ categories, onOpenTool, onOpenHandbook, o
       <div className="dashboard-modal" role="dialog" aria-modal="true" aria-labelledby="request-title" onClick={(e) => e.stopPropagation()}>
         <button className="modal-close" aria-label="Close request form" disabled={requestSending} onClick={() => setShowRequest(false)}>×</button>
         <p className="eyebrow">TOOL PIPELINE</p><h2 id="request-title">Request a New Tool</h2>
-        {requestSent ? <div className="request-success" role="status"><strong>Request submitted</strong><p>Your request has been accepted for email delivery to Maria at maria.mccrann@floodriskadvisory.com.au.</p></div> :
+        {requestSent ? <div className="request-success" role="status"><strong>Request submitted</strong><p>Your request has been accepted for email delivery to Maria at maria.mccrann@gmwater.com.au.</p></div> :
           <form onSubmit={submitRequest} aria-busy={requestSending}>
             <p className="modal-lead">What calculation, check or engineering workflow would make your work easier?</p>
             <label className="request-field">Tool idea or problem to solve<textarea required maxLength={5000} disabled={requestSending} value={requestText} onChange={(e) => setRequestText(e.target.value)} placeholder="e.g. I need a quick calculator for…" /></label>

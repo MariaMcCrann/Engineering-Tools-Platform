@@ -1232,6 +1232,54 @@ export function calculateRatingCurve(base: CulvertInput, minimum: number, maximu
   });
 }
 
+/**
+ * Chow open-channel profile-family label (M1-3 mild, S1-3 steep, C1/C3
+ * critical) for a single traced branch, based on where its depth sits
+ * relative to normal and critical depth. Branches never cross yn or yc
+ * within themselves (traceStandardStepProfile's branch bounds enforce
+ * this), so any one real station's depth identifies the whole branch's zone.
+ */
+function classifyProfileZone(depth: number, normalDepth: number, criticalDepth: number, slopeRegime: SlopeRegime): string {
+  if (slopeRegime === "mild") {
+    if (depth > normalDepth) return "M1";
+    if (depth > criticalDepth) return "M2";
+    return "M3";
+  }
+  if (slopeRegime === "steep") {
+    if (depth > criticalDepth) return "S1";
+    if (depth > normalDepth) return "S2";
+    return "S3";
+  }
+  return depth > criticalDepth ? "C1" : "C3";
+}
+
+/**
+ * Short profile description in the style of the legacy app's "Perfil
+ * S2+Resalto+Perfil S1" summary (Chow zone labels either side of a
+ * hydraulic jump). This classifies each traced branch by zone and orders
+ * them inlet-to-outlet; it does not reproduce the legacy app's 17 named
+ * profile-family cases, only a Chow-zone summary of what was actually traced.
+ */
+export function describeProfile(result: CulvertProfileResult): string {
+  if (result.profiles.length === 0) {
+    return result.note || "No partial-flow profile applies (barrel flowing full or pressurized).";
+  }
+  const zoneOf = (profile: WaterSurfaceProfile) => {
+    const real = realStations(profile);
+    const depth = (real[0] ?? profile.stations[0]).depth;
+    return classifyProfileZone(depth, result.normalDepth, result.criticalDepth, result.slopeRegime);
+  };
+  const meanX = (profile: WaterSurfaceProfile) => {
+    const real = realStations(profile);
+    return real.reduce((sum, station) => sum + station.x, 0) / Math.max(real.length, 1);
+  };
+  const ordered = [...result.profiles].sort((a, b) => meanX(a) - meanX(b));
+  const parts = ordered.map((profile) => `${zoneOf(profile)} profile`);
+  return result.hydraulicJump && ordered.length === 2
+    ? `${parts[0]} + Hydraulic Jump + ${parts[1]}`
+    : parts.join(" + ");
+}
+
 /** Detailed table follows the original standard-step output; excludes display-only extensions. */
 export function profileCalculationRows(input: CulvertInput, profile: WaterSurfaceProfile) {
   return [...realStations(profile)].sort((a, b) => a.x - b.x).map((station) => {
