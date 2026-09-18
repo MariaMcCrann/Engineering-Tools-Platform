@@ -293,7 +293,11 @@ export function PumpDutyPointTool() {
         <Field label="Max pump speed" value={maxSpeed} unit="Hz" onChange={setMaxSpeed} />
         <Field label="Pump speed (VSD)" value={speed} unit="Hz" onChange={setSpeed} />
       </div>
+      {r && (<PumpCurveChart samples={r.curveSamples} dutyMax={r.dutyFlowMaxCase !== null && r.dutyHeadMaxCase !== null ? { q: r.dutyFlowMaxCase, h: r.dutyHeadMaxCase } : null} dutyMin={r.dutyFlowMinCase !== null && r.dutyHeadMinCase !== null ? { q: r.dutyFlowMinCase, h: r.dutyHeadMinCase } : null} />)}
+      <details className="culvert-detail-panel">
+        <summary>Edit supplier pump curve</summary>
       <div className="stage-table-wrap"><table className="stage-table"><thead><tr><th>Flow (L/s)</th><th>Head (m)</th></tr></thead><tbody>{pumpCurve.map((p, i) => <tr key={i}><td><input type="number" step="any" value={p.flow} onChange={(e) => updatePumpPoint(i, "flow", e.target.value)} /></td><td><input type="number" step="any" value={p.head} onChange={(e) => updatePumpPoint(i, "head", e.target.value)} /></td></tr>)}</tbody></table></div>
+      </details>
       <p className="engine-note">Pump curve from the supplier, for one pump at 100% speed. Scaled by speed ratio and pump count using the affinity laws.</p></Section>
       <Section number={5} title="Other parameters"><div className="calc-fields">
         <Field label="Fluid density" value={density} unit="kg/m³" onChange={setDensity} />
@@ -332,8 +336,10 @@ export function PumpDutyPointTool() {
       <Metric name="Sum of fitting loss factors, ΣK" value={fmt(r.sumK, 3)} />
       <Metric name="Static head, min / max" value={fmt(r.staticHeadMin, 2) + " m / " + fmt(r.staticHeadMax, 2) + " m"} />
       <Metric name="Speed ratio" value={fmt(r.speedRatio, 3)} />
-      <PumpCurveChart samples={r.curveSamples} dutyMax={r.dutyFlowMaxCase !== null && r.dutyHeadMaxCase !== null ? { q: r.dutyFlowMaxCase, h: r.dutyHeadMaxCase } : null} dutyMin={r.dutyFlowMinCase !== null && r.dutyHeadMinCase !== null ? { q: r.dutyFlowMinCase, h: r.dutyHeadMinCase } : null} />
+      <details className="culvert-detail-panel">
+        <summary>Calculation table</summary>
       <div className="stage-table-wrap"><table className="stage-table"><thead><tr><th>Flow (L/s)</th><th>Sys. max (m)</th><th>Sys. min (m)</th><th>Pump (m)</th></tr></thead><tbody>{r.curveSamples.map((s) => <tr key={s.q}><td>{s.q}</td><td>{fmt(s.sysMax, 1)}</td><td>{fmt(s.sysMin, 1)}</td><td>{fmt(s.pump, 1)}</td></tr>)}</tbody></table></div>
+      </details>
       <button className="download-btn" onClick={exportCsv}>↓ Export calculation CSV</button>
       <p className="engine-note">Preliminary design aid only. Friction loss uses the Colebrook-White equation. Confirm pump curve, roughness, levels and NPSH margin against manufacturer data before issue.</p></>}
     </aside></div>
