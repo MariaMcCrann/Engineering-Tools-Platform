@@ -1,6 +1,6 @@
 # Design Review & Close-out — version 1
 
-Open **Design & Documentation → Design Review & Close-out** from the platform dashboard, or visit `/design-review`.
+Open **Project Management → Design Review & Close-out** from the platform dashboard, or visit `/design-review`.
 
 ## First review
 
