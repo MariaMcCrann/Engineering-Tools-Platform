@@ -300,6 +300,75 @@ function HydrographChart({ rows }: { rows: HydrographRowInput[] }) {
   );
 }
 
+function ChannelCrossSectionChart({
+  source, base, sideSlope, bedLevel, naturalPoints, waterLevel,
+}: {
+  source: TailwaterSource;
+  base: number;
+  sideSlope: number;
+  bedLevel: number;
+  naturalPoints: ChannelPointInput[];
+  waterLevel: number;
+}) {
+  if (source === "direct") return null;
+  type ChannelPoint = { station: number; elevation: number };
+  let points: ChannelPoint[];
+  let bedRef: number;
+
+  if (source === "natural") {
+    const parsed = naturalPoints
+      .map((p) => ({ station: numberValue(p.station), elevation: numberValue(p.elevation) }))
+      .filter((p) => Number.isFinite(p.station) && Number.isFinite(p.elevation))
+      .sort((a, b) => a.station - b.station);
+    if (parsed.length < 2) return null;
+    bedRef = Math.min(...parsed.map((p) => p.elevation));
+    points = parsed;
+  } else {
+    if (!(base > 0) || !Number.isFinite(bedLevel)) return null;
+    bedRef = bedLevel;
+    const wallHeight = Math.max(base * 0.6, Number.isFinite(waterLevel) ? (waterLevel - bedLevel) * 1.4 : 1, 1);
+    points = source === "trapezoidal" && sideSlope > 0
+      ? [
+          { station: -sideSlope * wallHeight, elevation: bedRef + wallHeight },
+          { station: 0, elevation: bedRef },
+          { station: base, elevation: bedRef },
+          { station: base + sideSlope * wallHeight, elevation: bedRef + wallHeight },
+        ]
+      : [
+          { station: 0, elevation: bedRef + wallHeight },
+          { station: 0, elevation: bedRef },
+          { station: base, elevation: bedRef },
+          { station: base, elevation: bedRef + wallHeight },
+        ];
+  }
+
+  const minStation = Math.min(...points.map((p) => p.station));
+  const maxStation = Math.max(...points.map((p) => p.station));
+  const minElev = Math.min(...points.map((p) => p.elevation), bedRef);
+  const maxElev = Math.max(...points.map((p) => p.elevation), Number.isFinite(waterLevel) ? waterLevel : minElev + 1);
+  const stationSpan = Math.max(maxStation - minStation, 0.001);
+  const elevSpan = Math.max(maxElev - minElev, 0.001);
+
+  const width = 640, height = 260, leftPad = 60, rightPad = 20, topPad = 24, bottomPad = 34;
+  const x = (s: number) => leftPad + ((s - minStation) / stationSpan) * (width - leftPad - rightPad);
+  const y = (e: number) => (height - bottomPad) - ((e - minElev) / elevSpan) * (height - topPad - bottomPad);
+
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Receiving channel cross-section" className="culvert-rating-chart">
+      <polyline points={points.map((p) => `${x(p.station)},${y(p.elevation)}`).join(" ")} fill="none" stroke="#64748b" strokeWidth="2.5" />
+      {Number.isFinite(waterLevel) && waterLevel > minElev && (
+        <>
+          <line x1={x(minStation)} y1={y(waterLevel)} x2={x(maxStation)} y2={y(waterLevel)} stroke="#2563eb" strokeWidth="2" strokeDasharray="6 3" />
+          <text x={x(minStation) + 4} y={y(waterLevel) - 6} fill="#2563eb" fontSize="12">Water level {waterLevel.toFixed(2)} m</text>
+        </>
+      )}
+      {points.map((p, index) => <circle key={index} cx={x(p.station)} cy={y(p.elevation)} r="3" fill="#475569" />)}
+      <text x={leftPad} y={height - 10} fontSize="12">Station (m)</text>
+      <text transform={`translate(16 ${height / 2}) rotate(-90)`} textAnchor="middle" fontSize="12">Elevation (m)</text>
+    </svg>
+  );
+}
+
 const REGIME_LABELS: Record<WaterSurfaceProfile["regime"], string> = {
   subcritical: "Subcritical",
   supercritical: "Supercritical",
@@ -749,9 +818,12 @@ export function CulvertTool() {
                 <Field label="Coefficient Y" value={customY} onChange={setCustomY} />
               </div>
             )}
+            <div className="calc-fields">
+              <Field label="Entrance loss coefficient" value={entranceLoss} onChange={setEntranceLoss} />
+            </div>
           </Section>
 
-          <Section number={3} title="Hydraulic conditions">
+          <Section number={3} title="Hydrology">
             <div className="shape-selector">
               <button
                 type="button"
@@ -768,16 +840,20 @@ export function CulvertTool() {
                 Hydrograph
               </button>
             </div>
-            {dischargeMode === "hydrograph" && (
+            {dischargeMode === "hydrograph" ? (
               <>
                 <HydrographTable rows={hydrographRows} onChange={setHydrographRows} />
                 <HydrographChart rows={hydrographRows} />
               </>
-            )}
-            <div className="calc-fields">
-              {dischargeMode === "constant" && (
+            ) : (
+              <div className="calc-fields">
                 <Field label="Design discharge" value={discharge} unit="m³/s" onChange={setDischarge} />
-              )}
+              </div>
+            )}
+          </Section>
+
+          <Section number={4} title="Downstream conditions">
+            <div className="calc-fields">
               <SelectField
                 label="Tailwater source"
                 value={tailwaterSource}
@@ -797,7 +873,6 @@ export function CulvertTool() {
                   </strong>
                 </div>
               )}
-              <Field label="Entrance loss coefficient" value={entranceLoss} onChange={setEntranceLoss} />
               <Field label="Outlet loss coefficient" value={outletLoss} onChange={setOutletLoss} />
             </div>
             {tailwaterSource !== "direct" && (
@@ -817,11 +892,19 @@ export function CulvertTool() {
                   <NaturalChannelTable points={naturalPoints} onChange={setNaturalPoints} />
                 )}
                 <p className="answer-note">Channel levels use the same datum as the inlet invert. Tailwater is recalculated for each total flow; invalid channel data blocks that result.</p>
+                <ChannelCrossSectionChart
+                  source={tailwaterSource}
+                  base={numberValue(channelBase)}
+                  sideSlope={numberValue(channelSideSlope)}
+                  bedLevel={numberValue(channelBedLevel)}
+                  naturalPoints={naturalPoints}
+                  waterLevel={outletLevel + effectiveInput.tailwaterDepth}
+                />
               </>
             )}
           </Section>
 
-          <Section number={4} title="Auto-size (design mode)">
+          <Section number={5} title="Auto-size (design mode)">
             {dischargeMode === "hydrograph" && (
               <p className="answer-note">Auto-size is evaluated against the constant-discharge field and does not apply while a hydrograph is active.</p>
             )}
@@ -858,7 +941,7 @@ export function CulvertTool() {
             )}
           </Section>
 
-          <Section number={5} title="Water-surface profile and calculation tables">
+          <Section number={6} title="Water-surface profile and calculation tables">
             {hydrograph?.result && <SelectField label="Inspect hydrograph flow" value={selectedHydrographRow} onChange={setSelectedHydrographRow}>
               <option value="peak">Peak governing headwater</option>
               {hydrograph.result.rows.map((row, index) => <option key={index} value={index}>Row {index + 1}: {format(row.time, 1)} min · {format(row.discharge)} m³/s{row.error ? " — invalid" : ""}</option>)}
@@ -911,10 +994,10 @@ export function CulvertTool() {
             )}
           </Section>
 
-          <Section number={6} title="Calibration curve">
+          <Section number={7} title="Calibration curve">
             <RatingCurvePanel input={effectiveInput} tailwater={tailwater} />
           </Section>
-          <Section number={7} title="Calculation basis">
+          <Section number={8} title="Calculation basis">
             <p className="answer-note">
               Governing headwater is the greater of FHWA HDS-5 inlet control
               and outlet control. On a mild slope, outlet control is computed
