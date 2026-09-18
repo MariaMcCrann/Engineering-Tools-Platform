@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { DesignReviewTool } from "./DesignReviewTool";
 import { ChannelFlowTool, ProposalTool, StageStorageTool } from "./EngineeringTools";
 import { OverlandFlowTool } from "./OverlandFlowTool";
 import { RisingMainTool } from "./RisingMainTool";
@@ -27,7 +28,7 @@ import { PipelinePumpSizingTool } from "./PipelinePumpSizingTool";
 import { EngineeringDashboard, DashboardCategory, DashboardTool, HANDBOOK_ITEMS } from "./EngineeringDashboard";
 import { SavedProjectsPanel, SaveProjectControl, CalculationTemplatesPanel, SavedProject, loadSavedProjects, persistSavedProjects } from "./WorkspacePanels";
 
-type ViewKey = "tools" | "saved-projects" | "templates" | "rorb" | "rational" | "channel" | "storage" | "overland" | "rising" | "gsdm" | "spillway" | "culvert" | "headloss" | "pipe-sizing" | "pipeline-hgl" | "rock-protection" | "headwall-concrete" | "base-slab-concrete" | "broad-crested-weir" | "drowned-sluice-gate" | "thrust-at-bends" | "buried-flexible-pipe" | "v-notch-weir" | "pit-surge" | "pump-duty-point" | "cantilever-wall" | "sediment-pond" | "regulator-design" | "pipeline-pump-sizing" | "proposal" | "site-intelligence";
+type ViewKey = "design-review" | "tools" | "saved-projects" | "templates" | "rorb" | "rational" | "channel" | "storage" | "overland" | "rising" | "gsdm" | "spillway" | "culvert" | "headloss" | "pipe-sizing" | "pipeline-hgl" | "rock-protection" | "headwall-concrete" | "base-slab-concrete" | "broad-crested-weir" | "drowned-sluice-gate" | "thrust-at-bends" | "buried-flexible-pipe" | "v-notch-weir" | "pit-surge" | "pump-duty-point" | "cantilever-wall" | "sediment-pond" | "regulator-design" | "pipeline-pump-sizing" | "proposal" | "site-intelligence";
 type ToolEntry = DashboardTool & { view: Exclude<ViewKey, "tools" | "saved-projects" | "templates"> };
 
 const TOOL_CATEGORIES: DashboardCategory[] = [
@@ -69,6 +70,7 @@ const TOOL_CATEGORIES: DashboardCategory[] = [
     { view: "site-intelligence", icon: "GIS", label: "Project Site Intelligence", desc: "Screen a Victorian site against planning, cadastral and waterway open data.", externalUrl: "https://siteintelligence.floodriskadvisory.com.au" },
   ]},
   { key: "design-docs", label: "Design & Documentation", description: "Proposal, design checking, reporting and templates.", icon: "▤", tools: [
+    { view: "design-review", icon: "DR", label: "Design Review & Close-out", desc: "Discipline checklists, designer responses, review history and close-out reports.", badge: "New" },
     { view: "proposal", icon: "PT", label: "Proposal Tool", desc: "Prepare consistent consultancy proposals.", disabled: true },
   ]},
   { key: "utilities", label: "Utilities & Converters", description: "Small calculators, conversions and engineering helpers.", icon: "▦", tools: [] },
@@ -109,6 +111,7 @@ export default function Home() {
   );
 
   const selectedTool = view === "saved-projects" ? <SavedProjectsPanel projects={savedProjects} onOpen={(v) => setView(v as ViewKey)} onDelete={deleteProject} onBack={() => setView("tools")}/>
+    : view === "design-review" ? <DesignReviewTool/>
     : view === "templates" ? <CalculationTemplatesPanel onOpen={(v) => setView(v as ViewKey)} onBack={() => setView("tools")}/>
     : view === "rorb" ? <>{toolHeader("RORB Median Flow", "rorb")}<RorbMedianFlowTool/></>
     : view === "rational" ? <>{toolHeader("Rational Method Runoff", "rational")}<RationalMethodTool/></>
