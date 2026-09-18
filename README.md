@@ -2,6 +2,8 @@
 
 A private, unified collection of browser-based civil engineering calculation and workflow tools.
 
+**Design Review & Close-out** is available under Design & Documentation and at `/design-review`. It supports source-based culvert checks, other asset types, response rounds, reviewer verification, audit history, local browser persistence, sequential review-file handoff and Excel/Word/printable PDF reports. See [the version 1 guide](apps/engineering-tools/docs/design-review.md) for source provenance and storage limitations.
+
 ## Tools included
 
 - **RORB Median Flow** — processes RORB batch output files, calculates the 1-up median flow for each duration, and identifies the critical duration and temporal pattern.

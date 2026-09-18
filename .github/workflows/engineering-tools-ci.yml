@@ -42,3 +42,6 @@ jobs:
 
       - name: Test culvert hydraulics
         run: node --experimental-strip-types --test tests/culvert-engine.test.mjs
+
+      - name: Test design review workflow and exports
+        run: node --experimental-strip-types --test tests/design-review.test.mjs

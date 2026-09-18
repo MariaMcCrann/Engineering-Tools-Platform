@@ -3,6 +3,7 @@ import "./globals.css";
 import "./report-tools.css";
 import "./dashboard.css";
 import "./hydraulic-diagrams.css";
+import "./design-review/review.css";
 import ReportExportTools from "./ReportExportTools";
 import HydraulicToolDiagrams from "./HydraulicToolDiagrams";
 
