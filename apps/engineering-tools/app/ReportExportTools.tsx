@@ -18,7 +18,24 @@ function reportData(){
 function reportHtml(){
   const d=reportData();
   const rows=(arr:string[][])=>arr.map(r=>`<tr>${r.map((x,i)=>`<${i?"td":"th"}>${esc(x)}</${i?"td":"th"}>`).join("")}</tr>`).join("");
-  const tables=d.tables.map(t=>t.outerHTML).join("");
+  // Clone tables and replace live form controls with their current displayed values.
+  // outerHTML alone serialises the original/default <select> option, not the user's current selection.
+  const tables=d.tables.map(t=>{
+    const clone=t.cloneNode(true) as HTMLTableElement;
+    const sourceControls=[...t.querySelectorAll("input,select,textarea")] as (HTMLInputElement|HTMLSelectElement|HTMLTextAreaElement)[];
+    const cloneControls=[...clone.querySelectorAll("input,select,textarea")];
+    cloneControls.forEach((control,i)=>{
+      const source=sourceControls[i];
+      if(!source)return;
+      const text=source instanceof HTMLSelectElement
+        ? (source.selectedOptions[0]?.textContent?.trim()||source.value)
+        : source.value;
+      const span=document.createElement("span");
+      span.textContent=text;
+      control.replaceWith(span);
+    });
+    return clone.outerHTML;
+  }).join("");
   const visuals=d.svgs.map(svg=>`<div class="visual">${svg.outerHTML}</div>`).join("");
   return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(d.title)}</title><style>@page{size:A4;margin:18mm 14mm 18mm}*{box-sizing:border-box}body{font:10.5px Arial;color:#24364d;margin:0}header{display:flex;align-items:center;gap:12px;border-bottom:3px solid #365b91;padding-bottom:10px;margin-bottom:16px}.logo{width:46px;height:46px}.headtext{flex:1}h1{font-size:22px;margin:0;color:#263d5e}h2{font-size:13px;color:#365b91;margin:18px 0 7px}.sub,.url,.date{color:#718096}.url{font-size:9px;margin-top:4px}.date{text-align:right;white-space:nowrap}.recommend{border:2px solid #365b91;background:#eef4fb;padding:10px 12px;margin:10px 0 16px}.recommend small{display:block;letter-spacing:1px;color:#365b91;font-weight:bold}.recommend strong{display:block;font-size:20px;color:#17375e;margin-top:4px}table{width:100%;border-collapse:collapse;margin:7px 0 15px;font-size:9.5px;page-break-inside:auto}thead{display:table-header-group}tr{page-break-inside:avoid}th{background:#dbe8f5;color:#263d5e;text-align:left;font-weight:700}th,td{border:1px solid #9aa9ba;padding:5px 6px}tr:nth-child(even) td{background:#f7f9fb}.visual{border:1px solid #ccd6e2;border-radius:6px;padding:10px;margin:8px 0 14px;page-break-inside:avoid;text-align:center}.visual svg{max-width:100%;height:auto;max-height:310px}.note{margin-top:18px;padding:9px;background:#eef7f2;border-left:3px solid #28755a;color:#365b50}footer{margin-top:16px;padding-top:7px;border-top:1px solid #ccd6e2;font-size:8.5px;color:#718096}</style></head><body><header><img class="logo" src="${location.origin}/brand-mark.svg"/><div class="headtext"><h1>${esc(d.title)}</h1><div class="sub">${esc(d.subtitle)}</div><div class="url">${esc(d.url)}</div></div><div class="date">${new Date().toLocaleDateString("en-AU")}</div></header>${d.resultHeading&&d.resultMain?`<div class="recommend"><small>${esc(d.resultHeading)}</small><strong>${esc(d.resultMain)}</strong></div>`:""}${d.fields.length?`<h2>Design inputs</h2><table>${rows(d.fields)}</table>`:""}${d.metrics.length?`<h2>Results summary</h2><table>${rows(d.metrics)}</table>`:""}${visuals?`<h2>Design schematic</h2>${visuals}`:""}${tables?`<h2>Calculation tables</h2>${tables}`:""}<div class="note">Engineering Tools calculation report. Verify inputs, assumptions, governing standards and site-specific design requirements before issue.</div><footer>${esc(d.url)}</footer></body></html>`;
 }
