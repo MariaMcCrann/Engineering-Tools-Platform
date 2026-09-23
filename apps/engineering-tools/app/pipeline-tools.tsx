@@ -7,7 +7,8 @@ const NU = 1.01e-6;
 
 type Material = "HDPE" | "RCP" | "PVC";
 type PipeSize = { nominal: number; hdpe?: number; rcp?: number; pvc?: number };
-type Reach = { id: number; name: string; length: string; material: Material; nominal: string; barrels: string; k: string };
+type ConduitType = "RCP Circular" | "RCP Box" | "HDPE PE100" | "HDPE PE80" | "PVC";
+type Reach = { id: number; name: string; length: string; conduitType: ConduitType; nominal: string; sdr: string; width: string; height: string; barrels: string; k: string };
 
 // Internal diameters reproduced from the source workbook Pipe Sizes sheet.
 const PIPE_SIZES: PipeSize[] = [
@@ -40,6 +41,25 @@ const PIPE_SIZES: PipeSize[] = [
 ];
 
 const ROUGHNESS_MM: Record<Material, number> = { HDPE: 0.015, RCP: 0.15, PVC: 0.015 };
+const PE_OD_MM = [160, 180, 200, 225, 250, 280, 315, 355, 400, 450, 500, 560, 630, 710, 800, 900, 1000, 1200];
+const SDR_OPTIONS = [41, 33, 26, 21, 17, 13.6, 11, 9, 7.4];
+
+function peInternalDiameter(odMm: number, sdr: number) {
+  return odMm * (1 - 2 / sdr);
+}
+
+function calcHydraulic(flowMLd: number, length: number, area: number, hydraulicDiameter: number, barrels: number, roughnessMm: number, k: number) {
+  const qTotal = flowMLd / 86.4;
+  const q = qTotal / barrels;
+  const velocity = q / area;
+  const re = velocity * hydraulicDiameter / NU;
+  const f = colebrookF(re, (roughnessMm / 1000) / hydraulicDiameter);
+  const vh = velocity * velocity / (2 * G);
+  const hf = f * (length / hydraulicDiameter) * vh;
+  const hs = k * vh;
+  return { qTotal, q, area, velocity, re, f, hf, hs, total: hf + hs };
+}
+
 const FITTINGS = [
   ["Entry", 0.5], ["Exit", 1.0], ["90° bend", 1.2], ["45° bend", 0.32], ["30° bend", 0.17],
   ["22.5° bend", 0.10], ["20° bend", 0.09], ["7° bend", 0.06], ["Butterfly valve", 0.20],
@@ -137,8 +157,7 @@ export function PipelineHglTool() {
   const [flow, setFlow] = useState("15");
   const [downstreamHgl, setDownstreamHgl] = useState("100");
   const [reaches, setReaches] = useState<Reach[]>([
-    { id: 1, name: "Reach 1", length: "25", material: "HDPE", nominal: "560", barrels: "1", k: "1.5" },
-    { id: 2, name: "Reach 2", length: "40", material: "HDPE", nominal: "560", barrels: "1", k: "0" },
+    { id: 1, name: "Reach 1", length: "25", conduitType: "RCP Circular", nominal: "600", sdr: "17", width: "1200", height: "900", barrels: "1", k: "1.5" },
   ]);
   const nextId = reaches.reduce((m, r) => Math.max(m, r.id), 0) + 1;
   const setReach = (id: number, patch: Partial<Reach>) => setReaches((rows) => rows.map((r) => r.id === id ? { ...r, ...patch } : r));
@@ -146,28 +165,85 @@ export function PipelineHglTool() {
   const results = useMemo(() => {
     let hgl = n(downstreamHgl), distance = 0;
     return reaches.map((r) => {
-      const idMm = idFor(r.material, n(r.nominal));
-      if (!idMm || n(r.length) < 0 || n(r.barrels) <= 0) return { ...r, valid: false as const, downstreamHgl: hgl, upstreamHgl: hgl, fromDistance: distance, toDistance: distance };
-      const c = calc(n(flow), n(r.length), idMm, n(r.barrels), ROUGHNESS_MM[r.material], n(r.k));
+      const barrels = n(r.barrels);
+      const length = n(r.length);
+      let area = NaN, hydraulicDiameter = NaN, sizeLabel = "—", roughnessMm = 0.15, idMm: number | undefined;
+
+      if (r.conduitType === "RCP Box") {
+        const width = n(r.width) / 1000, height = n(r.height) / 1000;
+        area = width * height;
+        hydraulicDiameter = (2 * width * height) / (width + height);
+        sizeLabel = `${r.width} × ${r.height} mm`;
+        roughnessMm = 0.15;
+      } else if (r.conduitType === "HDPE PE100" || r.conduitType === "HDPE PE80") {
+        const od = n(r.nominal), sdr = n(r.sdr);
+        idMm = peInternalDiameter(od, sdr);
+        hydraulicDiameter = idMm / 1000;
+        area = Math.PI * hydraulicDiameter * hydraulicDiameter / 4;
+        sizeLabel = `OD${r.nominal} SDR${r.sdr}`;
+        roughnessMm = 0.015;
+      } else {
+        const material: Material = r.conduitType === "RCP Circular" ? "RCP" : "PVC";
+        idMm = idFor(material, n(r.nominal));
+        if (idMm) {
+          hydraulicDiameter = idMm / 1000;
+          area = Math.PI * hydraulicDiameter * hydraulicDiameter / 4;
+        }
+        sizeLabel = `DN${r.nominal}`;
+        roughnessMm = ROUGHNESS_MM[material];
+      }
+
+      if (!(area > 0) || !(hydraulicDiameter > 0) || length < 0 || barrels <= 0) {
+        return { ...r, valid: false as const, downstreamHgl: hgl, upstreamHgl: hgl, fromDistance: distance, toDistance: distance, sizeLabel, roughnessMm };
+      }
+      const calcResult = calcHydraulic(n(flow), length, area, hydraulicDiameter, barrels, roughnessMm, n(r.k));
       const downstreamLevel = hgl, fromDistance = distance;
-      hgl += c.total; distance += n(r.length);
-      return { ...r, valid: true as const, idMm, ...c, downstreamHgl: downstreamLevel, upstreamHgl: hgl, fromDistance, toDistance: distance };
+      hgl += calcResult.total;
+      distance += length;
+      return { ...r, valid: true as const, ...calcResult, idMm, hydraulicDiameter, sizeLabel, roughnessMm, downstreamHgl: downstreamLevel, upstreamHgl: hgl, fromDistance, toDistance: distance };
     });
   }, [flow, downstreamHgl, reaches]);
+
   const final = results.at(-1);
   const totalLoss = final ? final.upstreamHgl - n(downstreamHgl) : 0;
 
   const exportCsv = () => {
-    const rows = [["Reach", "Length (m)", "Material", "Nominal (mm)", "ID (mm)", "Barrels", "K", "Velocity (m/s)", "hf (mm)", "hs (mm)", "Total loss (mm)", "Downstream HGL (m AHD)", "Upstream HGL (m AHD)"],
-      ...results.map((x) => x.valid ? [x.name, x.length, x.material, x.nominal, x.idMm, x.barrels, x.k, x.velocity, x.hf * 1000, x.hs * 1000, x.total * 1000, x.downstreamHgl, x.upstreamHgl] : [x.name, x.length, x.material, x.nominal, "INVALID"] )];
-    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([rows.map((r) => r.join(",")).join("\n")], { type: "text/csv" })); a.download = "pipeline-hgl.csv"; a.click(); URL.revokeObjectURL(a.href);
+    const rows = [["Reach", "Length (m)", "Conduit type", "Size", "Barrels", "K", "Pipe roughness (mm)", "Velocity (m/s)", "hf (mm)", "hs (mm)", "Total loss (mm)", "Downstream HGL (m AHD)", "Upstream HGL (m AHD)"],
+      ...results.map((x) => x.valid ? [x.name, x.length, x.conduitType, x.sizeLabel, x.barrels, x.k, x.roughnessMm, x.velocity, x.hf * 1000, x.hs * 1000, x.total * 1000, x.downstreamHgl, x.upstreamHgl] : [x.name, x.length, x.conduitType, x.sizeLabel, "INVALID"])];
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([rows.map((r) => r.join(",")).join("\n")], { type: "text/csv" }));
+    a.download = "pipeline-hgl.csv"; a.click(); URL.revokeObjectURL(a.href);
   };
 
   return <div className="content">
     <div className="title-row"><div><p className="eyebrow">HYDRAULIC DESIGN TOOL</p><h1>Pipeline HGL</h1><p className="subtitle">Multi-reach Colebrook–White headloss and required upstream hydraulic grade line.</p></div></div>
     <section className="calc-card"><div className="calc-card-title"><b>1</b><h2>Design flow and downstream level</h2></div><div className="calc-fields"><Field label="Design flow" value={flow} unit="ML/d" onChange={setFlow}/><Field label="Downstream HGL / FSL" value={downstreamHgl} unit="m AHD" onChange={setDownstreamHgl}/></div></section>
-    <section className="calc-card"><div className="calc-card-title"><b>2</b><h2>Pipeline reaches</h2></div><div className="storage-table"><table><thead><tr><th>Reach</th><th>Length</th><th>Material</th><th>Nominal</th><th>Barrels</th><th>K</th><th></th></tr></thead><tbody>{reaches.map((r) => <tr key={r.id}><td><input value={r.name} onChange={(e) => setReach(r.id, { name: e.target.value })}/></td><td><input type="number" value={r.length} onChange={(e) => setReach(r.id, { length: e.target.value })}/></td><td><select value={r.material} onChange={(e) => setReach(r.id, { material: e.target.value as Material })}><option>HDPE</option><option>RCP</option><option>PVC</option></select></td><td><select value={r.nominal} onChange={(e) => setReach(r.id, { nominal: e.target.value })}>{PIPE_SIZES.filter((p) => idFor(r.material, p.nominal)).map((p) => <option key={p.nominal} value={p.nominal}>DN{p.nominal}</option>)}</select></td><td><input type="number" value={r.barrels} onChange={(e) => setReach(r.id, { barrels: e.target.value })}/></td><td><input type="number" step="any" value={r.k} onChange={(e) => setReach(r.id, { k: e.target.value })}/></td><td><button onClick={() => setReaches((rows) => rows.filter((x) => x.id !== r.id))}>×</button></td></tr>)}</tbody></table></div><button className="download-btn" onClick={() => setReaches((rows) => [...rows, { id: nextId, name: `Reach ${nextId}`, length: "10", material: "HDPE", nominal: "560", barrels: "1", k: "0" }])}>+ Add reach</button></section>
-    <div className="calc-layout"><section className="calc-card"><div className="calc-card-title"><b>3</b><h2>HGL results</h2></div><div className="storage-table"><table><thead><tr><th>Reach</th><th>Distance</th><th>ID</th><th>Velocity</th><th>HF (mm)</th><th>HS (mm)</th><th>Total Loss (mm)</th><th>Downstream HGL</th><th>Upstream HGL</th></tr></thead><tbody>{results.map((x) => <tr key={x.id}><td>{x.name}</td><td>{fmt(x.toDistance, 1)} m</td><td>{x.valid ? `${fmt(x.idMm, 1)} mm` : "—"}</td><td>{x.valid ? `${fmt(x.velocity)} m/s` : "—"}</td><td>{x.valid ? fmt(x.hf * 1000, 1) : "—"}</td><td>{x.valid ? fmt(x.hs * 1000, 1) : "—"}</td><td>{x.valid ? <strong>{fmt(x.total * 1000, 1)}</strong> : "—"}</td><td>{fmt(x.downstreamHgl)}</td><td><strong>{fmt(x.upstreamHgl)}</strong></td></tr>)}</tbody></table></div></section><aside className="results-card"><p className="eyebrow">PIPELINE RESULT</p><div className="result-main"><strong>{fmt(totalLoss)}</strong><span>m ({fmt(totalLoss * 1000, 1)} mm) total headloss</span></div><Metric name="Downstream HGL" value={`${fmt(n(downstreamHgl))} m AHD`}/><Metric name="Required upstream HGL" value={`${final ? fmt(final.upstreamHgl) : "—"} m AHD`}/><Metric name="Total length" value={`${final ? fmt(final.toDistance, 1) : "0.0"} m`}/><button className="download-btn" onClick={exportCsv}>↓ Export HGL CSV</button></aside></div>
+
+    <section className="calc-card"><div className="calc-card-title"><b>2</b><h2>Pipeline reaches</h2></div>
+      <div className="storage-table"><table><thead><tr><th>Reach</th><th>Length</th><th>Conduit type</th><th>Size / geometry</th><th>Barrels</th><th>K</th><th></th></tr></thead><tbody>
+      {reaches.map((r) => <tr key={r.id}>
+        <td><input value={r.name} onChange={(e) => setReach(r.id, { name: e.target.value })}/></td>
+        <td><input type="number" value={r.length} onChange={(e) => setReach(r.id, { length: e.target.value })}/></td>
+        <td><select value={r.conduitType} onChange={(e) => setReach(r.id, { conduitType: e.target.value as ConduitType })}>
+          <option>RCP Circular</option><option>RCP Box</option><option>HDPE PE100</option><option>HDPE PE80</option><option>PVC</option>
+        </select></td>
+        <td>
+          {r.conduitType === "RCP Box" ? <span style={{display:"flex",gap:4,alignItems:"center"}}><input type="number" aria-label="Box width mm" title="Internal width (mm)" value={r.width} onChange={(e) => setReach(r.id, { width: e.target.value })}/><span>×</span><input type="number" aria-label="Box height mm" title="Internal height (mm)" value={r.height} onChange={(e) => setReach(r.id, { height: e.target.value })}/><span>mm</span></span>
+          : r.conduitType === "HDPE PE100" || r.conduitType === "HDPE PE80" ? <span style={{display:"flex",gap:4,alignItems:"center"}}><select aria-label="HDPE outside diameter" value={r.nominal} onChange={(e) => setReach(r.id, { nominal: e.target.value })}>{PE_OD_MM.map((od) => <option key={od} value={od}>OD{od}</option>)}</select><select aria-label="HDPE SDR" value={r.sdr} onChange={(e) => setReach(r.id, { sdr: e.target.value })}>{SDR_OPTIONS.map((sdr) => <option key={sdr} value={sdr}>SDR{sdr}</option>)}</select></span>
+          : <select value={r.nominal} onChange={(e) => setReach(r.id, { nominal: e.target.value })}>{PIPE_SIZES.filter((p) => idFor(r.conduitType === "RCP Circular" ? "RCP" : "PVC", p.nominal)).map((p) => <option key={p.nominal} value={p.nominal}>DN{p.nominal}</option>)}</select>}
+        </td>
+        <td><input type="number" value={r.barrels} onChange={(e) => setReach(r.id, { barrels: e.target.value })}/></td>
+        <td><input type="number" step="any" value={r.k} onChange={(e) => setReach(r.id, { k: e.target.value })}/></td>
+        <td><button onClick={() => setReaches((rows) => rows.filter((x) => x.id !== r.id))}>×</button></td>
+      </tr>)}</tbody></table></div>
+      <p className="answer-note">For HDPE, select outside diameter and SDR; internal diameter is calculated from wall thickness. PE80/PE100 grade does not change the headloss equation. RCP box calculations assume a full-flow closed conduit and use hydraulic diameter 4A/P.</p>
+      <button className="download-btn" onClick={() => setReaches((rows) => [...rows, { id: nextId, name: `Reach ${nextId}`, length: "10", conduitType: "RCP Circular", nominal: "600", sdr: "17", width: "1200", height: "900", barrels: "1", k: "0" }])}>+ Add reach</button>
+    </section>
+
+    <div className="calc-layout"><section className="calc-card"><div className="calc-card-title"><b>3</b><h2>HGL results</h2></div><div className="storage-table"><table><thead><tr><th>Reach</th><th>Distance</th><th>Type</th><th>Size</th><th>Velocity</th><th>Pipe Roughness (mm)</th><th>HF (mm)</th><th>HS (mm)</th><th>Total Loss (mm)</th><th>Downstream HGL</th><th>Upstream HGL</th></tr></thead><tbody>
+      {results.map((x) => <tr key={x.id}><td>{x.name}</td><td>{fmt(x.toDistance, 1)} m</td><td>{x.conduitType}</td><td>{x.sizeLabel}</td><td>{x.valid ? `${fmt(x.velocity)} m/s` : "—"}</td><td>{x.valid ? fmt(x.roughnessMm, 3) : "—"}</td><td>{x.valid ? fmt(x.hf * 1000, 1) : "—"}</td><td>{x.valid ? fmt(x.hs * 1000, 1) : "—"}</td><td>{x.valid ? <strong>{fmt(x.total * 1000, 1)}</strong> : "—"}</td><td>{fmt(x.downstreamHgl)}</td><td><strong>{fmt(x.upstreamHgl)}</strong></td></tr>)}
+    </tbody></table></div></section>
+    <aside className="results-card"><p className="eyebrow">PIPELINE RESULT</p><div className="result-main"><strong>{fmt(totalLoss)}</strong><span>m ({fmt(totalLoss * 1000, 1)} mm) total headloss</span></div><Metric name="Downstream HGL" value={`${fmt(n(downstreamHgl))} m AHD`}/><Metric name="Required upstream HGL" value={`${final ? fmt(final.upstreamHgl) : "—"} m AHD`}/><Metric name="Total length" value={`${final ? fmt(final.toDistance, 1) : "0.0"} m`}/><button className="download-btn" onClick={exportCsv}>↓ Export HGL CSV</button></aside></div>
     <section className="calc-card"><div className="calc-card-title"><b>4</b><h2>Typical fittings K reference</h2></div><div className="storage-table fittings-k-table"><table><thead><tr><th>Fitting</th><th>K</th></tr></thead><tbody>{FITTINGS.map(([name, coeff]) => <tr key={name}><td>{name}</td><td>{coeff}</td></tr>)}</tbody></table></div></section>
   </div>;
 }
