@@ -64,7 +64,7 @@ const TOOL_CATEGORIES: DashboardCategory[] = [
   ]},
   { key: "storage", label: "Storage & Dams", description: "Stage-storage, detention and dam-related calculations.", icon: "▤", tools: [
     { view: "storage", icon: "SS", label: "Stage Storage", desc: "Stage-storage calculations and outputs." },
-    { view: "sediment-pond", icon: "SD", label: "Sediment Pond Sizing", desc: "Fair & Geyer removal efficiency, basin stage-storage, cleanout and dewatering." },
+    { view: "sediment-pond", icon: "SB", label: "Sediment Basin Sizing", desc: "Fair & Geyer removal efficiency, basin stage-storage, cleanout and dewatering." },
   ]},
   { key: "site-gis", label: "Site & GIS", description: "Site intelligence, planning overlays, cadastre and mapping.", icon: "⌖", tools: [
     { view: "site-intelligence", icon: "GIS", label: "Project Site Intelligence", desc: "Screen a Victorian site against planning, cadastral and waterway open data.", externalUrl: "https://siteintelligence.floodriskadvisory.com.au" },
@@ -137,7 +137,7 @@ export default function Home() {
     : view === "pit-surge" ? <>{toolHeader("Pit Surge", "pit-surge")}<PitSurgeTool/></>
     : view === "pump-duty-point" ? <>{toolHeader("Pump Duty Point", "pump-duty-point")}<PumpDutyPointTool/></>
     : view === "cantilever-wall" ? <>{toolHeader("Cantilever Wall", "cantilever-wall")}<CantileverWallTool/></>
-    : view === "sediment-pond" ? <>{toolHeader("Sediment Pond Sizing", "sediment-pond")}<SedimentPondTool/></>
+    : view === "sediment-pond" ? <>{toolHeader("Sediment Basin Sizing", "sediment-pond")}<SedimentPondTool/></>
     : view === "regulator-design" ? <>{toolHeader("Regulator Design", "regulator-design")}<RegulatorDesignTool/></>
     : view === "pipeline-pump-sizing" ? <>{toolHeader("Pipeline and Pump Sizing", "pipeline-pump-sizing")}<PipelinePumpSizingTool/></>
     : view === "proposal" ? <>{toolHeader("Proposal Tool", "proposal")}<ProposalTool/></> : null;

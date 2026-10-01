@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { calculateBasinGeometry, storageAtDepth } from "./sediment-basin/engine";
 
 const num = (v: string) => Number(v);
 const fmt = (v: number, d = 2) =>
@@ -49,35 +50,6 @@ function PondShapeIcon({ variant }: { variant: PondVariant }) {
     {variant === "diffuser" && <>{box()}<circle cx="20" cy="20" r="5" fill="none" stroke="#456b99" strokeWidth="1.5" />{inlet}{outlet}</>}
     {variant === "curtain" && <>{box()}<line x1="46" y1="9" x2="46" y2="31" stroke="#456b99" strokeWidth="3" strokeDasharray="2 2" />{inlet}{outlet}</>}
   </svg>;
-}
-
-type StageRow = { stage: number; storage: number; area: number; length: number; width: number };
-function buildStageStorage(bottomLength: number, bottomWidth: number, sideSlope: number, maxStage: number, increment: number): StageRow[] {
-  const sideLenPerIncrement = increment * sideSlope;
-  const rows: StageRow[] = [{ stage: 0, storage: 0, area: bottomLength * bottomWidth, length: bottomLength, width: bottomWidth }];
-  let stage = 0;
-  while (stage < maxStage - 1e-9) {
-    const prev = rows[rows.length - 1];
-    const nextStage = Math.min(Math.round((stage + increment) * 100) / 100, maxStage);
-    const length = prev.length + 2 * sideLenPerIncrement;
-    const width = prev.width + 2 * sideLenPerIncrement;
-    const area = (bottomLength + 2 * nextStage * sideSlope) * (bottomWidth + 2 * nextStage * sideSlope);
-    const storage = prev.storage + prev.area * increment + increment * sideLenPerIncrement * prev.length + prev.width * increment * sideLenPerIncrement;
-    rows.push({ stage: nextStage, storage, area, length, width });
-    stage = nextStage;
-  }
-  return rows;
-}
-function storageAtDepth(rows: StageRow[], depth: number) {
-  if (depth <= rows[0].stage) return rows[0].storage;
-  for (let i = 1; i < rows.length; i++) {
-    if (rows[i].stage >= depth) {
-      const p0 = rows[i - 1], p1 = rows[i];
-      const t = p1.stage === p0.stage ? 0 : (depth - p0.stage) / (p1.stage - p0.stage);
-      return p0.storage + (p1.storage - p0.storage) * t;
-    }
-  }
-  return rows[rows.length - 1].storage;
 }
 
 function Field({ label, value, unit, hint, onChange }: { label: string; value: string; unit?: string; hint?: string; onChange: (v: string) => void }) {
@@ -157,12 +129,20 @@ export function SedimentPondTool() {
     const inputs = [Q, A, lw, de, dp, ss, lambda, increment, reqEff, catchment, loadRate, targetFr, dewaterDepth, providedArea, vs];
     if (!inputs.every((v) => Number.isFinite(v) && v >= 0) || Q <= 0 || A <= 0 || lw <= 0 || de < 0 || dp <= 0 || ss <= 0 || lambda <= 0 || lambda >= 1 || increment <= 0) return null;
 
-    const nwlWidth = Math.sqrt(A / lw);
-    const nwlLength = lw * nwlWidth;
-    const bottomLength = nwlLength - 2 * de * ss;
-    const bottomWidth = nwlWidth - 2 * de * ss;
-    if (bottomLength <= 0 || bottomWidth <= 0) return null;
-    const bottomArea = bottomLength * bottomWidth;
+    let geometry;
+    try {
+      geometry = calculateBasinGeometry({
+        nwlArea: A,
+        lengthWidthRatio: lw,
+        permanentPoolDepth: dp,
+        extendedDetentionDepth: de,
+        sideSlope: ss,
+        stageIncrement: increment,
+      });
+    } catch {
+      return null;
+    }
+    const { nwlWidth, nwlLength, bottomLength, bottomWidth, bottomArea, stageRows } = geometry;
 
     const dStar = Math.min(1, dp);
     const depthRatio = (de + dp) / (de + dStar);
@@ -170,9 +150,6 @@ export function SedimentPondTool() {
     const nExp = 1 / (1 - lambda);
     const efficiency = 1 - Math.pow(1 + (1 / nExp) * overflowRatio * depthRatio, -nExp);
     const efficiencyOk = efficiency >= reqEff;
-
-    const maxStage = Math.round((de + dp) * 100) / 100;
-    const stageRows = buildStageStorage(bottomLength, bottomWidth, ss, maxStage, increment);
 
     const requiredStorage = catchment * reqEff * loadRate * targetFr;
     const actualBasinDepth = Math.round((dp - 0.5) * 100) / 100;
@@ -199,7 +176,7 @@ export function SedimentPondTool() {
   const exportCsv = () => {
     if (!r) return;
     const rows: (string | number)[][] = [
-      ["Sediment Pond Sizing Calculation", "Value", "Unit"],
+      ["Sediment Basin Sizing Calculation", "Value", "Unit"],
       ["Settling velocity, Vs", r.vs, "m/s"], ["NWL length / width", r.nwlLength, "m / " + fmt(r.nwlWidth) + " m"],
       ["Bottom length / width", r.bottomLength, "m / " + fmt(r.bottomWidth) + " m"], ["Bottom area", r.bottomArea, "m2"],
       ["Fraction of solids removed, R", r.efficiency, ""], ["Required storage, St", r.requiredStorage, "m3"],
@@ -210,14 +187,14 @@ export function SedimentPondTool() {
     ];
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([rows.map((row) => row.join(",")).join("\n")], { type: "text/csv" }));
-    a.download = "sediment-pond-sizing-calculation.csv";
+    a.download = "sediment-basin-sizing-calculation.csv";
     a.click();
     URL.revokeObjectURL(a.href);
   };
 
   return <div className="content calc-content">
     <p className="eyebrow">STORMWATER TREATMENT — WSUD</p>
-    <h1>Sediment Pond Sizing</h1>
+    <h1>Sediment Basin Sizing</h1>
     <p className="subtitle">Sediment removal efficiency (Fair &amp; Geyer), trapezoidal basin stage-storage, cleanout frequency and dewatering area.</p>
     <div className="calc-layout"><div>
       <Section number={1} title="Site and target"><div className="calc-fields">
