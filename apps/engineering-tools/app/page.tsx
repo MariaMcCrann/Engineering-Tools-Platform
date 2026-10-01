@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { DesignReviewTool } from "./DesignReviewTool";
+import { DesignChecklistTool } from "./DesignChecklistTool";
 import { ChannelFlowTool, ProposalTool, StageStorageTool } from "./EngineeringTools";
 import { OverlandFlowTool } from "./OverlandFlowTool";
 import { RisingMainTool } from "./RisingMainTool";
@@ -28,7 +29,7 @@ import { PipelinePumpSizingTool } from "./PipelinePumpSizingTool";
 import { EngineeringDashboard, DashboardCategory, DashboardTool, HANDBOOK_ITEMS } from "./EngineeringDashboard";
 import { SavedProjectsPanel, SaveProjectControl, CalculationTemplatesPanel, SavedProject, loadSavedProjects, persistSavedProjects } from "./WorkspacePanels";
 
-type ViewKey = "design-review" | "tools" | "saved-projects" | "templates" | "rorb" | "rational" | "channel" | "storage" | "overland" | "rising" | "gsdm" | "spillway" | "culvert" | "headloss" | "pipe-sizing" | "pipeline-hgl" | "rock-protection" | "headwall-concrete" | "base-slab-concrete" | "broad-crested-weir" | "drowned-sluice-gate" | "thrust-at-bends" | "buried-flexible-pipe" | "v-notch-weir" | "pit-surge" | "pump-duty-point" | "cantilever-wall" | "sediment-pond" | "regulator-design" | "pipeline-pump-sizing" | "proposal" | "site-intelligence";
+type ViewKey = "design-review" | "design-checklist" | "tools" | "saved-projects" | "templates" | "rorb" | "rational" | "channel" | "storage" | "overland" | "rising" | "gsdm" | "spillway" | "culvert" | "headloss" | "pipe-sizing" | "pipeline-hgl" | "rock-protection" | "headwall-concrete" | "base-slab-concrete" | "broad-crested-weir" | "drowned-sluice-gate" | "thrust-at-bends" | "buried-flexible-pipe" | "v-notch-weir" | "pit-surge" | "pump-duty-point" | "cantilever-wall" | "sediment-pond" | "regulator-design" | "pipeline-pump-sizing" | "proposal" | "site-intelligence";
 type ToolEntry = DashboardTool & { view: Exclude<ViewKey, "tools" | "saved-projects" | "templates"> };
 
 const TOOL_CATEGORIES: DashboardCategory[] = [
@@ -71,6 +72,7 @@ const TOOL_CATEGORIES: DashboardCategory[] = [
   ]},
   { key: "design-docs", label: "Design & Documentation", description: "Proposal, design checking, reporting and templates.", icon: "▤", tools: [
     { view: "proposal", icon: "PT", label: "Proposal Tool", desc: "Prepare consistent consultancy proposals.", disabled: true },
+    { view: "design-checklist", icon: "DC", label: "Design Checklist", desc: "Culvert, drawings and VicTrack design procedure checklists with designer/reviewer comments and Excel export.", badge: "New" },
   ]},
   { key: "utilities", label: "Utilities & Converters", description: "Small calculators, conversions and engineering helpers.", icon: "▦", tools: [] },
   { key: "project-management", label: "Project Management", description: "Design reviews, close-out, cost, planning and delivery support.", icon: "⚙", tools: [
@@ -113,6 +115,7 @@ export default function Home() {
 
   const selectedTool = view === "saved-projects" ? <SavedProjectsPanel projects={savedProjects} onOpen={(v) => setView(v as ViewKey)} onDelete={deleteProject} onBack={() => setView("tools")}/>
     : view === "design-review" ? <DesignReviewTool/>
+    : view === "design-checklist" ? <>{toolHeader("Design Checklist", "design-checklist")}<DesignChecklistTool/></>
     : view === "templates" ? <CalculationTemplatesPanel onOpen={(v) => setView(v as ViewKey)} onBack={() => setView("tools")}/>
     : view === "rorb" ? <>{toolHeader("RORB Median Flow", "rorb")}<RorbMedianFlowTool/></>
     : view === "rational" ? <>{toolHeader("Rational Method Runoff", "rational")}<RationalMethodTool/></>
