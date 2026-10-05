@@ -205,3 +205,5 @@ td small { color:#96a0ad; font-weight:400; }
 @media (max-width:760px){.dchk{padding:16px}.dchk-controls{padding-left:0}.dchk-comments{grid-template-columns:1fr;padding-left:0}}
 
 .dchk-section > summary{cursor:pointer;display:list-item;list-style-position:inside}.dchk-section > summary h3{display:inline-flex;width:calc(100% - 24px);vertical-align:middle;margin:0}.dchk-section[open] > summary{margin-bottom:16px}
+
+.handbook-document-actions{display:flex;gap:16px;margin-top:8px}.handbook-document-actions a{color:#267a8a;font-weight:600;font-size:13px}

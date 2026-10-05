@@ -20,12 +20,16 @@ export type DashboardCategory = {
   tools: DashboardTool[];
 };
 
-export const HANDBOOK_ITEMS = [
+export const HANDBOOK_ITEMS: { title: string; detail: string; href?: string; size?: string }[] = [
   { title: "Engineering Handbook", detail: "Methods, assumptions, standards and calculation guidance." },
   { title: "ARR2019", detail: "Australian Rainfall and Runoff guidance used by hydrology tools." },
   { title: "Hydraulic references", detail: "Manning, culvert, pipe, spillway and scour design references." },
   { title: "Structural references", detail: "AS 3600 and source material used by structural calculators." },
   { title: "Authority manuals", detail: "DTP, CMA, GMW, VicPlan and other authority guidance." },
+  {"title": "Austroads Guide to Road Design Part 5B (2023)", "detail": "Drainage — Open Channels, Culverts and Floodway Crossings.", "href": "/manuals/austroads-agrd05b-23.pdf", "size": "12.9 MB"},
+  {"title": "Austroads Guide to Road Design Part 5A (2024)", "detail": "Drainage — Road Surface, Networks, Basins and Subsurface.", "href": "/manuals/austroads-agrd05a-24.pdf", "size": "15.1 MB"},
+  {"title": "Humes Concrete Pipe Reference Manual — Issue 3", "detail": "Technical reference for concrete pipe.", "href": "/manuals/humes-concrete-pipe-reference-manual-issue-3.pdf", "size": "19.4 MB"},
+
 ];
 
 export function EngineeringDashboard({ categories, onOpenTool, onOpenHandbook, onOpenSaved, onOpenTemplates }: { categories: DashboardCategory[]; onOpenTool: (tool: DashboardTool) => void; onOpenHandbook: () => void; onOpenSaved: () => void; onOpenTemplates: () => void }) {
@@ -106,7 +110,7 @@ export function EngineeringDashboard({ categories, onOpenTool, onOpenHandbook, o
       <aside className="dashboard-side">
         <section><h3>⚙ Quick Actions</h3><button onClick={() => { setShowRequest(true); setRequestSent(false); setRequestError(""); }}><b>＋</b><span><strong>Request a New Tool</strong><small>Have an idea? Add it to the pipeline.</small></span><em>›</em></button><button onClick={onOpenSaved}><b>▢</b><span><strong>Saved Projects</strong><small>Access your saved calculations.</small></span><em>›</em></button><button onClick={onOpenTemplates}><b>▤</b><span><strong>Calculation Templates</strong><small>Use and manage templates.</small></span><em>›</em></button></section>
         <section><h3>◷ Recently Used</h3>{favourites.slice(0,4).map((tool) => <button key={tool.view} onClick={() => onOpenTool(tool)} disabled={tool.disabled}><b>{tool.icon}</b><span><strong>{tool.label}</strong></span><em>›</em></button>)}</section>
-        <section><h3>▣ Source Documents & Manuals</h3>{HANDBOOK_ITEMS.slice(1,5).map((item) => <button key={item.title} onClick={onOpenHandbook}><b>▤</b><span><strong>{item.title}</strong><small>{item.detail}</small></span><em>›</em></button>)}<button className="view-handbook" onClick={onOpenHandbook}>Open Engineering Handbook →</button></section>
+        <section><h3>▣ Source Documents & Manuals</h3>{HANDBOOK_ITEMS.slice(1).map((item) => <button key={item.title} onClick={onOpenHandbook}><b>▤</b><span><strong>{item.title}</strong><small>{item.detail}</small></span><em>›</em></button>)}<button className="view-handbook" onClick={onOpenHandbook}>Open Engineering Handbook →</button></section>
       </aside>
     </div>
 

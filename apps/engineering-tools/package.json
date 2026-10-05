@@ -9,7 +9,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start -H 0.0.0.0 -p ${PORT:-3000}",
-    "lint": "next lint"
+    "lint": "next lint",
+    "prebuild": "node scripts/prepare-reference-documents.mjs",
+    "predev": "node scripts/prepare-reference-documents.mjs"
   },
   "dependencies": {
     "drizzle-orm": "0.45.2",

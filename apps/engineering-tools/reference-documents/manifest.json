@@ -1,0 +1,39 @@
+[
+  {
+    "filename": "austroads-agrd05b-23.pdf",
+    "title": "Austroads Guide to Road Design Part 5B (2023)",
+    "detail": "Drainage \u2014 Open Channels, Culverts and Floodway Crossings.",
+    "bytes": 12926642,
+    "sha256": "76b40bf481d1d268e37343be216abea5707dffae6f7972467f9fa9343809f0cd",
+    "parts": [
+      "austroads-agrd05b-23.pdf.part00",
+      "austroads-agrd05b-23.pdf.part01",
+      "austroads-agrd05b-23.pdf.part02"
+    ]
+  },
+  {
+    "filename": "austroads-agrd05a-24.pdf",
+    "title": "Austroads Guide to Road Design Part 5A (2024)",
+    "detail": "Drainage \u2014 Road Surface, Networks, Basins and Subsurface.",
+    "bytes": 15133235,
+    "sha256": "ce7e32124a977ef3b556266ab0c50f7e04af5eedd3dd8233d1da4c3cf4bfa5e0",
+    "parts": [
+      "austroads-agrd05a-24.pdf.part00",
+      "austroads-agrd05a-24.pdf.part01",
+      "austroads-agrd05a-24.pdf.part02"
+    ]
+  },
+  {
+    "filename": "humes-concrete-pipe-reference-manual-issue-3.pdf",
+    "title": "Humes Concrete Pipe Reference Manual \u2014 Issue 3",
+    "detail": "Technical reference for concrete pipe.",
+    "bytes": 19441260,
+    "sha256": "7d4ef761056c060a1071f0d0a7fc353c80dad3d855886aeeb269e343d55c1b3e",
+    "parts": [
+      "humes-concrete-pipe-reference-manual-issue-3.pdf.part00",
+      "humes-concrete-pipe-reference-manual-issue-3.pdf.part01",
+      "humes-concrete-pipe-reference-manual-issue-3.pdf.part02",
+      "humes-concrete-pipe-reference-manual-issue-3.pdf.part03"
+    ]
+  }
+]
