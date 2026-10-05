@@ -1,3 +1,4 @@
+import { CHECKLISTS, questionsOf } from "../design-checklist/checklists.ts";
 import type { Check, Metadata } from "./engine";
 export const CASE_SOURCE = "Engineering Tool Ideas conversation, 18 September 2026. ST045683 summary only; original marked-up drawings and issued register not recovered. Verify wording and references before issue.";
 const basis = "Assessing Design Basis conversation, 8 September 2026; agreed hydraulic hold-point wording. Project association requires confirmation.";
@@ -23,3 +24,5 @@ export const CULVERT_CHECKS: Seed[] = [
 export function initialMetadata(sample: boolean, reviewer: string): Metadata {
   return { project: sample ? "ST045683" : "", title: sample ? "Twin-cell 2400 × 1800 box culvert — source verification" : "Design review", asset: sample ? "Culvert" : "Other", location: "", stage: "", revision: "", date: new Date().toLocaleDateString("en-CA"), reviewer, designer: "", documents: "", scope: sample ? "Reconstructed from prior conversations. Confirm the original drawing/report revisions and project-specific findings before issuing comments. All checks start Not reviewed." : "" };
 }
+
+export const WORKBOOK_CULVERT_CHECKS: Seed[] = CHECKLISTS.find(c => c.key === "culvert-design-review")!.sections.flatMap(section => questionsOf({ ...CHECKLISTS[0], sections: [section] }).map(row => ({ discipline: section.title, title: row.procedure, guidance: "Record the assessment and reference the relevant drawing, report or calculation. Use Not applicable with a reason where this check does not apply.", source: `DESIGN CHECKLIST_Draft.xlsx, Culvert Design Review sheet, item ${row.no}; supplied 5 October 2026.` })));

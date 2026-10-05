@@ -124,6 +124,6 @@ export function DesignChecklistTool() {
         </article>;
       })}
     </section>; })}
-    <p className="dchk-muted">Source: DESIGN CHECKLIST (draft workbook, last updated 28 September 2016). Answers are stored only in this browser — export to Excel to file a copy with the project.</p>
+    <p className="dchk-muted">Source: DESIGN CHECKLIST_Draft.xlsx supplied 5 October 2026; original procedure dated 28 September 2016. Answers are stored only in this browser — export to Excel to file a copy with the project.</p>
   </div>;
 }

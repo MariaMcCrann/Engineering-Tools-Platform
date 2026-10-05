@@ -54,3 +54,9 @@ Every seeded check begins **Not reviewed**. No designer responses, accepted calc
 ## Validation
 
 Run `node --experimental-strip-types --test tests/design-review.test.mjs`, then `npm run build`. CI runs the workflow/export tests. Tests cover two rounds, close/reopen, role restrictions, evidence requirements, closure guards, assignments, immutable history, stale/conflicting imports and Excel/Word contents.
+
+## October 2026 workbook update
+
+Design Checklist includes a separate **Culvert Design Review** tab with all 101 procedures from the supplied workbook, plus 10 additions to Culvert and one services check in Drawings. Bridge repeats the Railway requirements in this workbook; those checks remain in Railway. Original item IDs are retained so saved answers stay attached to the same questions. Added checks start unanswered, unchecked and Open. Example project answers and comments are excluded.
+
+In Design Review & Close-out, choose **Start culvert design review** to create a review with the same 101 checks and the existing response-round, evidence and closure workflow. Each check starts Not reviewed. Existing review histories are unchanged; the new template applies to new reviews.

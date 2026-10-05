@@ -5,7 +5,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import path from "node:path";
 import ts from "typescript";
 import { addCheck, createReview, inView, mergeReview, recordEntry, setClosed, updateMetadata, validateReview } from "../app/design-review/engine.ts";
-import { CULVERT_CHECKS, initialMetadata } from "../app/design-review/templates.ts";
+import { CULVERT_CHECKS, WORKBOOK_CULVERT_CHECKS, initialMetadata } from "../app/design-review/templates.ts";
 
 const reviewer = { name: "Maria", role: "Reviewer" };
 const designer = { name: "Designer A", role: "Designer" };
@@ -121,4 +121,12 @@ test("Excel and Word exports contain history, provenance and escaped text", asyn
     assert.match(xml, /Designer responded/); assert.match(xml, /Audit trail/); assert.match(xml, /&lt;script&gt;/);
     assert.ok(zip.file("[Content_Types].xml"));
   } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test("workbook culvert template starts all 101 checks unreviewed without example findings", () => {
+  const review = createReview({ ...initialMetadata(false, "Maria"), project: "Test project" }, reviewer, WORKBOOK_CULVERT_CHECKS);
+  assert.equal(review.items.length, 101);
+  assert.equal(new Set(review.items.map(c => c.title)).size, 101);
+  assert.ok(review.items.every(c => c.status === "Not reviewed" && c.history.length === 0 && c.source.includes("Culvert Design Review sheet")));
+  assert.ok(review.items.some(c => c.discipline === "Hydrology" && c.title === "Climate change allowance considered where required"));
 });

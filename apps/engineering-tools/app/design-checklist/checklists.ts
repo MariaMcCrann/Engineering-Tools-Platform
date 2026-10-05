@@ -1,7 +1,7 @@
 // Checklist content transcribed from "DESIGN CHECKLIST_Draft.xlsx" (CULVERT, Drawings and Railway sheets,
-// last updated 28 September 2016). Only the procedure wording is carried over; the example project answers are not.
+// original procedure last updated 28 September 2016; expanded workbook supplied 5 October 2026). Only the procedure wording is carried over; the example project answers are not.
 // A row is [number, item, procedure]. A row without a procedure is a sub-heading.
-type Row = [no: string, item: string, procedure?: string];
+type Row = [no: string, item: string, procedure?: string, stableId?: string];
 type SectionSource = { no: string; title: string; rows: Row[] };
 type TemplateSource = { key: string; label: string; title: string; description: string; sections: SectionSource[] };
 
@@ -154,9 +154,206 @@ const SOURCES: TemplateSource[] = [
   ] },
 ];
 
+
+// Workbook additions use explicit IDs; legacy sequential IDs must never change.
+SOURCES.find(t => t.key === "culvert")!.sections.find(s => s.title === "Background")!.rows.push(
+  ["", "", "Site/location and culvert identification are correct", "culvert-oct2026-1"],
+  ["", "", "Existing culvert size, type, material and condition documented", "culvert-oct2026-2"],
+  ["", "", "Design standards/guidelines identified and current", "culvert-oct2026-3"],
+  ["", "", "Design life stated and appropriate", "culvert-oct2026-4"],
+  ["", "", "Existing upstream/downstream structures identified", "culvert-oct2026-5"],
+  ["", "", "Existing inlet/outlet invert levels verified", "culvert-oct2026-6"],
+  ["", "", "Existing road levels and crossfall confirmed", "culvert-oct2026-7"]
+);
+SOURCES.find(t => t.key === "culvert")!.sections.find(s => s.title === "Rationalisation")!.rows.push(
+  ["", "", "Design purpose and rationale are clear", "culvert-oct2026-8"]
+);
+SOURCES.find(t => t.key === "culvert")!.sections.find(s => s.title === "Field Survey")!.rows.push(
+  ["", "", "Waterway/channel geometry adequately surveyed", "culvert-oct2026-9"]
+);
+SOURCES.find(t => t.key === "culvert")!.sections.find(s => s.title === "Reporting")!.rows.push(
+  ["", "", "Design assumptions clearly documented", "culvert-oct2026-10"]
+);
+SOURCES.find(t => t.key === "drawings")!.sections[0].rows.push(["", "", "Existing services shown/considered", "drawings-oct2026-services"]);
+SOURCES.push({
+  "key": "culvert-design-review",
+  "label": "Culvert Design Review",
+  "title": "Culvert Replacement – Design Review Checklist",
+  "description": "101 technical review checks from the October 2026 workbook, grouped by design basis, hydrology, hydraulics, culvert design, scour, road interface, constructability, drawings, consistency and final QA.",
+  "sections": [
+    {
+      "no": "1",
+      "title": "Design basis",
+      "rows": [
+        ["1", "", "Site/location and culvert identification are correct"],
+        ["2", "", "Design purpose and replacement rationale are clear"],
+        ["3", "", "Existing culvert size, type, material and condition documented"],
+        ["4", "", "Relevant survey information referenced"],
+        ["5", "", "Design standards/guidelines identified and current"],
+        ["6", "", "Design life stated and appropriate"],
+        ["7", "", "Design assumptions clearly documented"]
+      ]
+    },
+    {
+      "no": "2",
+      "title": "Survey & existing conditions",
+      "rows": [
+        ["8", "", "Existing inlet/outlet invert levels verified"],
+        ["9", "", "Existing road levels and crossfall confirmed"],
+        ["10", "", "Waterway/channel geometry adequately surveyed"],
+        ["11", "", "Existing upstream/downstream structures identified"],
+        ["12", "", "Existing services shown/considered"],
+        ["13", "", "Property boundaries/easements considered"],
+        ["14", "", "Existing drainage connections identified"]
+      ]
+    },
+    {
+      "no": "3",
+      "title": "Hydrology",
+      "rows": [
+        ["15", "", "Catchment area checked"],
+        ["16", "", "Catchment delineation reasonable"],
+        ["17", "", "ARR methodology appropriate"],
+        ["18", "", "IFD/rainfall inputs checked"],
+        ["19", "", "Losses and other hydrologic parameters justified"],
+        ["20", "", "Existing and design flows clearly reported"],
+        ["21", "", "Relevant AEP events assessed"],
+        ["22", "", "Climate change allowance considered where required"],
+        ["23", "", "Hydrologic calculations independently sense-checked"]
+      ]
+    },
+    {
+      "no": "4",
+      "title": "Hydraulics",
+      "rows": [
+        ["24", "", "Proposed culvert capacity checked"],
+        ["25", "", "Existing vs proposed hydraulic performance compared"],
+        ["26", "", "Inlet/outlet control considered"],
+        ["27", "", "Headwater level checked"],
+        ["28", "", "Tailwater assumptions reasonable"],
+        ["29", "", "Afflux assessed"],
+        ["30", "", "Upstream flood impacts assessed"],
+        ["31", "", "Road overtopping assessed where applicable"],
+        ["32", "", "Velocity through barrels checked"],
+        ["33", "", "Outlet velocity checked"],
+        ["34", "", "Blockage allowance applied and justified"],
+        ["35", "", "Debris passage considered"],
+        ["36", "", "Fish passage/environmental requirements considered where relevant"]
+      ]
+    },
+    {
+      "no": "5",
+      "title": "Culvert design",
+      "rows": [
+        ["37", "", "Number and size of barrels match calculations"],
+        ["38", "", "Culvert material/class appropriate"],
+        ["39", "", "Minimum cover requirements satisfied"],
+        ["40", "", "Culvert grade checked"],
+        ["41", "", "Inlet/outlet invert levels checked"],
+        ["42", "", "Culvert length sufficient for road geometry"],
+        ["43", "", "End treatments appropriate"],
+        ["44", "", "Headwalls/wingwalls appropriately designed"],
+        ["45", "", "Structural loading requirements addressed"],
+        ["46", "", "Bedding/foundation requirements specified"],
+        ["47", "", "Settlement/differential settlement considered"]
+      ]
+    },
+    {
+      "no": "6",
+      "title": "Scour & erosion",
+      "rows": [
+        ["48", "", "Scour risk assessed"],
+        ["49", "", "Outlet protection sized appropriately"],
+        ["50", "", "Rock beaching/riprap details provided"],
+        ["51", "", "Apron length/width/depth adequate"],
+        ["52", "", "Geotextile/filter requirements specified"],
+        ["53", "", "Downstream erosion risk considered"],
+        ["54", "", "Upstream erosion/bank protection considered"]
+      ]
+    },
+    {
+      "no": "7",
+      "title": "Road design/interface",
+      "rows": [
+        ["55", "", "Finished road levels consistent with culvert design"],
+        ["56", "", "Pavement reconstruction limits shown"],
+        ["57", "", "Road crossfall and drainage maintained"],
+        ["58", "", "Batter slopes appropriate"],
+        ["59", "", "Safety barriers considered where required"],
+        ["60", "", "Culvert ends clear of required safety zones or appropriately treated"]
+      ]
+    },
+    {
+      "no": "8",
+      "title": "Constructability",
+      "rows": [
+        ["61", "", "Practical construction sequence possible"],
+        ["62", "", "Temporary water diversion/bypass considered"],
+        ["63", "", "Works can be constructed within available footprint"],
+        ["64", "", "Excavation depth and stability considered"],
+        ["65", "", "Dewatering requirements considered"],
+        ["66", "", "Access for construction plant considered"],
+        ["67", "", "Existing services can be protected/relocated"],
+        ["68", "", "Traffic management/staging considered"],
+        ["69", "", "Existing culvert removal methodology considered"],
+        ["70", "", "Environmental controls considered"]
+      ]
+    },
+    {
+      "no": "9",
+      "title": "Drawing review",
+      "rows": [
+        ["71", "", "Title, drawing number and revision correct"],
+        ["72", "", "North point, scale and datum provided"],
+        ["73", "", "Existing vs proposed works clearly distinguishable"],
+        ["74", "", "Plan, longitudinal section and cross-sections consistent"],
+        ["75", "", "Culvert size/number/material/class shown"],
+        ["76", "", "Inlet and outlet invert levels shown"],
+        ["77", "", "Culvert grade shown or derivable"],
+        ["78", "", "Culvert length shown"],
+        ["79", "", "Road levels shown"],
+        ["80", "", "Headwalls/endwalls shown and detailed"],
+        ["81", "", "Scour protection extent and specification shown"],
+        ["82", "", "Bedding/backfill details shown"],
+        ["83", "", "Services shown"],
+        ["84", "", "Construction notes/specifications adequate"],
+        ["85", "", "Dimensions and levels sufficient to construct without assumptions"]
+      ]
+    },
+    {
+      "no": "10",
+      "title": "Report ↔ drawing consistency",
+      "rows": [
+        ["86", "", "Culvert dimensions match report/calculations"],
+        ["87", "", "Invert levels match"],
+        ["88", "", "Culvert length and grade match"],
+        ["89", "", "Number of barrels match"],
+        ["90", "", "Material/class match"],
+        ["91", "", "Headwall/end treatment matches"],
+        ["92", "", "Scour protection matches hydraulic recommendations"],
+        ["93", "", "Design flows/AEPs are consistent throughout documents"]
+      ]
+    },
+    {
+      "no": "11",
+      "title": "Final QA",
+      "rows": [
+        ["94", "", "Calculations checked for obvious errors"],
+        ["95", "", "Units consistent"],
+        ["96", "", "Levels use consistent datum"],
+        ["97", "", "Drawing references/details correct"],
+        ["98", "", "Superseded information removed"],
+        ["99", "", "Comments from previous review incorporated/closed"],
+        ["100", "", "Design risks/limitations clearly identified"],
+        ["101", "", "Package is suitable for its stated stage (concept/IFR/IFC)"]
+      ]
+    }
+  ]
+});
+
 export const CHECKLISTS: Checklist[] = SOURCES.map(t => {
   let n = 0;
-  return { ...t, sections: t.sections.map(s => ({ no: s.no, title: s.title, rows: s.rows.map(([no, item, procedure]) => ({ id: `${t.key}-${++n}`, no, item, procedure: procedure ?? "", heading: procedure === undefined })) })) };
+  return { ...t, sections: t.sections.map(s => ({ no: s.no, title: s.title, rows: s.rows.map(([no, item, procedure, stableId]) => ({ id: stableId ?? `${t.key}-${++n}`, no, item, procedure: procedure ?? "", heading: procedure === undefined })) })) };
 });
 
 export const blankItem = (): ItemState => ({ answer: "", checked: false, designer: "", reviewer: "", status: "Open" });
