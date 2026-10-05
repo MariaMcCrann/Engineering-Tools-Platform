@@ -409,9 +409,53 @@ for (const source of designSection.rows.filter(r => !r.heading)) {
 general.sections = general.sections.filter(s => s !== designSection);
 technical.description = "Technical culvert review with section 7 design checks consolidated into the matching topic. Overlapping checks are combined; procedure-specific details are retained.";
 
+// Drawing content and report consistency each have one owning checklist.
+const drawings = CHECKLISTS.find(c => c.key === "drawings")!;
+const drawingSection = technical.sections.find(s => s.no === "9")!;
+const reportingSection = technical.sections.find(s => s.no === "10")!;
+export const DRAWING_MERGES: Record<string, string> = {
+  "culvert-design-review-73": "drawings-2",
+  "culvert-design-review-79": "drawings-1",
+  "culvert-design-review-83": "drawings-oct2026-services",
+};
+for (const row of drawingSection.rows) {
+  const targetId = DRAWING_MERGES[row.id];
+  if (targetId) {
+    const target = drawings.sections.flatMap(s => s.rows).find(r => r.id === targetId)!;
+    target.procedure += ` ${row.procedure}.`;
+  }
+}
+drawings.sections.push({ ...drawingSection, no: "2", title: "Drawing review", rows: drawingSection.rows.filter(r => !DRAWING_MERGES[r.id]) });
+general.sections.find(s => s.title === "Reporting")!.rows.push(
+  { id: "report-drawing-consistency-heading", no: "9.2", item: "Report ↔ drawing consistency", procedure: "", heading: true },
+  ...reportingSection.rows,
+);
+technical.sections = technical.sections.filter(s => s !== drawingSection && s !== reportingSection);
+drawings.description = "Drawing review — levels, assets, services, boundaries, legends, trees, dimensions, sections, construction details and specifications. Overlapping checks are combined.";
+technical.description = "Technical culvert checks with section 7 consolidated into the matching topics. Drawing review is in Drawings; report-to-drawing consistency is in General → Reporting.";
+
 export const blankItem = (): ItemState => ({ answer: "", checked: false, designer: "", reviewer: "", status: "Open" });
 export const questionsOf = (c: Checklist) => c.sections.flatMap(s => s.rows.filter(r => !r.heading));
 export function summarise(c: Checklist, state: ChecklistState) {
   const items = questionsOf(c).map(r => state.items[r.id] ?? blankItem());
   return { total: items.length, answered: items.filter(i => i.answer).length, checked: items.filter(i => i.checked).length, closed: items.filter(i => i.status === "Closed").length, no: items.filter(i => i.answer === "No").length };
+}
+
+// Recover answers for unchanged moved questions, without mixing different projects
+// or overwriting an answer already saved in the destination. Keep source backups.
+export function relocateSavedAnswers(store: Record<string, ChecklistState>): Record<string, ChecklistState> {
+  const source = store["culvert-design-review"];
+  if (!source?.header || !source?.items) return store;
+  const result = { ...store };
+  for (const key of ["culvert", "drawings"]) {
+    const target = result[key];
+    const identified = target && (target.header.job || target.header.project);
+    if (identified && ["job", "project"].some(field => target.header[field] && source.header[field] && target.header[field] !== source.header[field])) continue;
+    const moved = CHECKLISTS.find(c => c.key === key)!.sections.flatMap(s => s.rows).filter(r => r.id.startsWith("culvert-design-review-") && source.items[r.id]);
+    if (!moved.length) continue;
+    const items = { ...(target?.items ?? {}) };
+    for (const row of moved) if (!items[row.id]) items[row.id] = { ...source.items[row.id] };
+    result[key] = { header: identified ? { ...target.header } : { ...source.header, ...target?.header }, items };
+  }
+  return result;
 }

@@ -64,3 +64,9 @@ In Design Review & Close-out, choose **Start culvert design review** to create a
 ## Consolidated general and culvert checks
 
 The former Culvert procedure is labelled **General**. Section 7 is removed from General: its 27 questions map to 16 enrichments of existing technical checks and 11 additional checks, giving 112 Culvert Design Review checks. Numerical criteria and internal references are retained from the supplied procedure; confirm applicability to the project. Finance and Reporting keep their original numbers and IDs, as do all retained General questions. The internal `culvert` storage key is retained so existing General answers remain available. Each checklist section is expandable/collapsible; exports always include all sections. Existing response-round reviews retain their issued content; new reviews use the consolidated template.
+
+## Drawing and reporting ownership
+
+Culvert Design Review section 9 now belongs to Drawings. Its existing/proposed works, road levels and services checks are combined with the matching drawing checks; the remaining 12 checks move with their IDs retained. Section 10 (Report ↔ drawing consistency) moves to General → Reporting as subsection 9.2. Current question counts: General 64, Drawings 24, Railway 12 and Culvert Design Review 89. New response-round culvert reviews use the technical-only template.
+
+Checklist sections start collapsed. Expand a section by selecting its heading; completion counts stay visible. Excel/PDF output includes every section regardless of its screen state. Unchanged moved questions recover their saved answers from the previous technical checklist when project identifiers agree, without overwriting destination answers.

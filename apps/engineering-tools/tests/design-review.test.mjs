@@ -123,10 +123,10 @@ test("Excel and Word exports contain history, provenance and escaped text", asyn
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
-test("workbook culvert template starts all 112 checks unreviewed without example findings", () => {
+test("workbook culvert template starts all 89 checks unreviewed without example findings", () => {
   const review = createReview({ ...initialMetadata(false, "Maria"), project: "Test project" }, reviewer, WORKBOOK_CULVERT_CHECKS);
-  assert.equal(review.items.length, 112);
-  assert.equal(new Set(review.items.map(c => c.title)).size, 112);
+  assert.equal(review.items.length, 89);
+  assert.equal(new Set(review.items.map(c => c.title)).size, 89);
   assert.ok(review.items.every(c => c.status === "Not reviewed" && c.history.length === 0 && c.source.includes("Culvert Design Review sheet")));
   assert.ok(review.items.some(c => c.discipline === "Hydrology" && c.title === "Climate change allowance considered where required"));
 });

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ANSWERS, blankItem, CHECKLISTS, HEADER_FIELDS, questionsOf, STATUSES, summarise } from "./design-checklist/checklists";
+import { ANSWERS, blankItem, CHECKLISTS, HEADER_FIELDS, questionsOf, STATUSES, summarise, relocateSavedAnswers } from "./design-checklist/checklists";
 import type { Answer, Checklist, ChecklistState, ItemState, ItemStatus } from "./design-checklist/checklists";
 
 const STORAGE_KEY = "engineering-design-checklists-v1";
@@ -10,7 +10,7 @@ type Filter = "all" | "open" | "unanswered";
 
 function loadStore(): Store {
   if (typeof window === "undefined") return {};
-  try { const raw = window.localStorage.getItem(STORAGE_KEY); const data = raw ? JSON.parse(raw) : {}; return data && typeof data === "object" && !Array.isArray(data) ? data : {}; }
+  try { const raw = window.localStorage.getItem(STORAGE_KEY); const data = raw ? JSON.parse(raw) : {}; return data && typeof data === "object" && !Array.isArray(data) ? relocateSavedAnswers(data) : {}; }
   catch { return {}; }
 }
 const emptyState = (): ChecklistState => ({ header: { date: new Date().toLocaleDateString("en-CA") }, items: {} });
@@ -108,7 +108,7 @@ export function DesignChecklistTool() {
     <div className="dchk-toolbar"><label>Show<select value={filter} onChange={e => setFilter(e.target.value as Filter)}><option value="all">All items</option><option value="open">Open items only</option><option value="unanswered">Unanswered only</option></select></label><div className="dchk-actions"><button onClick={() => void exportWorkbook(checklist, state)}>↓ Download Excel</button><button onClick={openPrint}>Print / Save as PDF</button><button onClick={reset}>Clear checklist</button></div></div>
     {notice && <p role="alert" className="dchk-notice">{notice}</p>}
 
-    {checklist.sections.map(s => { const rows = s.rows.filter(r => r.heading || shown(r.id)); if (!rows.some(r => !r.heading)) return null; return <details key={`${key}-${s.no}`} className="dchk-card dchk-section" open>
+    {checklist.sections.map(s => { const rows = s.rows.filter(r => r.heading || shown(r.id)); if (!rows.some(r => !r.heading)) return null; return <details key={`${key}-${s.no}`} className="dchk-card dchk-section">
       <summary><h3><span>{s.no}</span>{s.title}<small>{questionsOf({ ...checklist, sections: [s] }).filter(r => state.items[r.id]?.status === "Closed").length}/{s.rows.filter(r => !r.heading).length} closed</small></h3></summary>
       {rows.map(r => {
         if (r.heading) return <h4 key={r.id} className="dchk-sub"><span>{r.no}</span>{r.item}</h4>;

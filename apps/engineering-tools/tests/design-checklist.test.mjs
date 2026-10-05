@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CHECKLISTS, blankItem, questionsOf, summarise, SECTION_7_DESTINATIONS } from "../app/design-checklist/checklists.ts";
+import { CHECKLISTS, blankItem, questionsOf, summarise, SECTION_7_DESTINATIONS, DRAWING_MERGES, relocateSavedAnswers } from "../app/design-checklist/checklists.ts";
 
 test("workbook sheets are all transcribed with unique item ids", () => {
   assert.deepEqual(CHECKLISTS.map(c => c.key), ["culvert", "drawings", "railway", "culvert-design-review"]);
   const count = key => questionsOf(CHECKLISTS.find(c => c.key === key)).length;
-  assert.equal(count("culvert"), 56); // General procedures after moving the 27 section 7 checks
-  assert.equal(count("drawings"), 12);
+  assert.equal(count("culvert"), 64); // General procedures after moving the 27 section 7 checks
+  assert.equal(count("drawings"), 24);
   assert.equal(count("railway"), 12);
-  assert.equal(count("culvert-design-review"), 112);
+  assert.equal(count("culvert-design-review"), 89);
   const ids = CHECKLISTS.flatMap(c => c.sections.flatMap(s => s.rows.map(r => r.id)));
   assert.equal(new Set(ids).size, ids.length);
 });
@@ -34,7 +34,7 @@ test("summary counts answers, ticks and closures; unanswered items default to Op
   const c = CHECKLISTS.find(x => x.key === "drawings");
   const [a, b] = questionsOf(c);
   const s = summarise(c, { header: {}, items: { [a.id]: { ...blankItem(), answer: "Yes", checked: true, status: "Closed" }, [b.id]: { ...blankItem(), answer: "No" } } });
-  assert.deepEqual(s, { total: 12, answered: 2, checked: 1, closed: 1, no: 1 });
+  assert.deepEqual(s, { total: 24, answered: 2, checked: 1, closed: 1, no: 1 });
 });
 
 test("workbook additions preserve legacy saved-answer IDs", () => {
@@ -46,5 +46,38 @@ test("workbook additions preserve legacy saved-answer IDs", () => {
   const drawings = CHECKLISTS.find(c => c.key === "drawings");
   assert.equal(questionsOf(drawings).find(r => r.id === "drawings-11").procedure, "Trees TPZ clearly marked?");
   const newList = CHECKLISTS.find(c => c.key === "culvert-design-review");
-  assert.deepEqual(summarise(newList, { header: {}, items: {} }), { total: 112, answered: 0, checked: 0, closed: 0, no: 0 });
+  assert.deepEqual(summarise(newList, { header: {}, items: {} }), { total: 89, answered: 0, checked: 0, closed: 0, no: 0 });
+});
+
+test("drawing review and report consistency move to their owners without duplicates", () => {
+  const general = CHECKLISTS.find(c => c.key === "culvert");
+  const drawings = CHECKLISTS.find(c => c.key === "drawings");
+  const technical = CHECKLISTS.find(c => c.key === "culvert-design-review");
+  assert.ok(!technical.sections.some(s => s.no === "9" || s.no === "10"));
+  for (let n = 71; n <= 85; n++) {
+    const id = `culvert-design-review-${n}`;
+    const rows = questionsOf(drawings);
+    assert.equal(rows.filter(r => r.id === (DRAWING_MERGES[id] ?? id)).length, 1);
+    if (DRAWING_MERGES[id]) assert.ok(!rows.some(r => r.id === id));
+  }
+  const reporting = general.sections.find(s => s.title === "Reporting");
+  for (let n = 86; n <= 93; n++) assert.equal(reporting.rows.filter(r => r.id === `culvert-design-review-${n}`).length, 1);
+  for (const checklist of CHECKLISTS) {
+    const procedures = questionsOf(checklist).map(r => r.procedure.toLowerCase());
+    assert.equal(new Set(procedures).size, procedures.length);
+  }
+});
+
+test("unchanged moved answers follow their question without overwriting destination or mixing projects", () => {
+  const answer = { ...blankItem(), answer: "Yes", reviewer: "Checked Rev B", status: "Closed" };
+  const source = { header: { project: "A", job: "1" }, items: { "culvert-design-review-71": answer, "culvert-design-review-86": answer } };
+  const moved = relocateSavedAnswers({ "culvert-design-review": source });
+  assert.deepEqual(moved.drawings.items["culvert-design-review-71"], answer);
+  assert.deepEqual(moved.culvert.items["culvert-design-review-86"], answer);
+  assert.deepEqual(moved.drawings.header, source.header);
+  const different = { header: { project: "B", job: "2" }, items: {} };
+  assert.deepEqual(relocateSavedAnswers({ "culvert-design-review": source, drawings: different }).drawings, different);
+  const existing = { header: { project: "A" }, items: { "culvert-design-review-71": blankItem() } };
+  assert.deepEqual(relocateSavedAnswers({ "culvert-design-review": source, drawings: existing }).drawings.items, existing.items);
+  assert.deepEqual(source.items["culvert-design-review-71"], answer);
 });
