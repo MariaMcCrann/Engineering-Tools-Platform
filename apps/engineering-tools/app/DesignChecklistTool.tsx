@@ -105,11 +105,11 @@ export function DesignChecklistTool() {
     <div className="dchk-summary"><Metric label="Items" value={String(stats.total)}/><Metric label="Answered" value={`${stats.answered}`}/><Metric label="Checked" value={`${stats.checked}`}/><Metric label="Answered “No”" value={`${stats.no}`}/><Metric label="Closed" value={`${stats.closed} / ${stats.total}`}/></div>
     <div className="dchk-progress" aria-label={`${stats.closed} of ${stats.total} items closed`}><span style={{ width: `${stats.total ? (100 * stats.closed) / stats.total : 0}%` }}/></div>
 
-    <div className="dchk-toolbar"><label>Show<select value={filter} onChange={e => setFilter(e.target.value as Filter)}><option value="all">All items</option><option value="open">Open items only</option><option value="unanswered">Unanswered only</option></select></label><div className="dchk-actions"><button onClick={() => void exportWorkbook(checklist, state)}>↓ Excel</button><button onClick={openPrint}>Print / PDF</button><button onClick={reset}>Clear checklist</button></div></div>
+    <div className="dchk-toolbar"><label>Show<select value={filter} onChange={e => setFilter(e.target.value as Filter)}><option value="all">All items</option><option value="open">Open items only</option><option value="unanswered">Unanswered only</option></select></label><div className="dchk-actions"><button onClick={() => void exportWorkbook(checklist, state)}>↓ Download Excel</button><button onClick={openPrint}>Print / Save as PDF</button><button onClick={reset}>Clear checklist</button></div></div>
     {notice && <p role="alert" className="dchk-notice">{notice}</p>}
 
-    {checklist.sections.map(s => { const rows = s.rows.filter(r => r.heading || shown(r.id)); if (!rows.some(r => !r.heading)) return null; return <section key={s.no} className="dchk-card dchk-section">
-      <h3><span>{s.no}</span>{s.title}<small>{questionsOf({ ...checklist, sections: [s] }).filter(r => state.items[r.id]?.status === "Closed").length}/{s.rows.filter(r => !r.heading).length} closed</small></h3>
+    {checklist.sections.map(s => { const rows = s.rows.filter(r => r.heading || shown(r.id)); if (!rows.some(r => !r.heading)) return null; return <details key={`${key}-${s.no}`} className="dchk-card dchk-section" open>
+      <summary><h3><span>{s.no}</span>{s.title}<small>{questionsOf({ ...checklist, sections: [s] }).filter(r => state.items[r.id]?.status === "Closed").length}/{s.rows.filter(r => !r.heading).length} closed</small></h3></summary>
       {rows.map(r => {
         if (r.heading) return <h4 key={r.id} className="dchk-sub"><span>{r.no}</span>{r.item}</h4>;
         const it = state.items[r.id] ?? blankItem();
@@ -123,7 +123,7 @@ export function DesignChecklistTool() {
           <div className="dchk-comments"><label>Designer comments<textarea rows={2} value={it.designer} onChange={e => setItem(r.id, { designer: e.target.value })}/></label><label>Reviewer comments<textarea rows={2} value={it.reviewer} onChange={e => setItem(r.id, { reviewer: e.target.value })}/></label></div>
         </article>;
       })}
-    </section>; })}
+    </details>; })}
     <p className="dchk-muted">Source: DESIGN CHECKLIST_Draft.xlsx supplied 5 October 2026; original procedure dated 28 September 2016. Answers are stored only in this browser — export to Excel to file a copy with the project.</p>
   </div>;
 }

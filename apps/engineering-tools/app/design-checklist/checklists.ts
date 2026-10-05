@@ -356,6 +356,59 @@ export const CHECKLISTS: Checklist[] = SOURCES.map(t => {
   return { ...t, sections: t.sections.map(s => ({ no: s.no, title: s.title, rows: s.rows.map(([no, item, procedure, stableId]) => ({ id: stableId ?? `${t.key}-${++n}`, no, item, procedure: procedure ?? "", heading: procedure === undefined })) })) };
 });
 
+// Keep the legacy storage key and IDs when renaming the visible checklist.
+const general = CHECKLISTS.find(c => c.key === "culvert")!;
+const technical = CHECKLISTS.find(c => c.key === "culvert-design-review")!;
+const designSection = general.sections.find(s => s.no === "7")!;
+general.label = "General";
+general.title = "General Design Checklist";
+general.description = "General project procedures — background, rationalisation, survey, OH&S, consultation, environment, finance and reporting. Technical culvert checks are in Culvert Design Review.";
+
+// Each former section 7 question has exactly one destination. Existing technical
+// questions are enriched instead of adding a second check for the same assessment.
+export const SECTION_7_DESTINATIONS: Record<string, { section: string; target?: string; detail?: string }> = {
+  "culvert-44": { section: "Hydraulics", target: "24", detail: "For irrigation assets, confirm capacity through IPM, Maximo and Area assessment." },
+  "culvert-45": { section: "Hydraulics" },
+  "culvert-46": { section: "Hydraulics" },
+  "culvert-47": { section: "Hydraulics" },
+  "culvert-48": { section: "Hydraulics", target: "culvert-47", detail: "Check whether headloss is less than 0.030 m (typically), or confirm that more head is available." },
+  "culvert-49": { section: "Hydraulics", target: "31" },
+  "culvert-50": { section: "Hydraulics", target: "33", detail: "Record whether exit velocity is < 0.75 m/s, 0.75–1.5 m/s or > 1.5 m/s." },
+  "culvert-51": { section: "Survey & existing conditions" },
+  "culvert-52": { section: "Culvert design", target: "43", detail: "Record the distance to the channel bend and assess whether a headwall-less arrangement is suitable." },
+  "culvert-53": { section: "Culvert design", target: "45", detail: "Assess excessive crossing loads and justify pipe class using the applicable Design Loading Standards (CPAA) and PipeClass load report; consider Class 2 RCP where appropriate." },
+  "culvert-54": { section: "Design basis", target: "5", detail: "For outlet irrigation flows, check the design guidelines for irrigation road crossings (A2833884)." },
+  "culvert-56": { section: "Culvert design", target: "41", detail: "Check pipe embedment below the bed: minimum 1/2 pipe diameter in channels or 1/3 in drains, or document the adopted alternative." },
+  "culvert-57": { section: "Culvert design", target: "39", detail: "Check 600 mm cover between pipe crown and road/track, or document the adopted requirement." },
+  "culvert-58": { section: "Culvert design", target: "39", detail: "Check 450 mm cover between pipe crown and table-drain bed, or document the adopted requirement." },
+  "culvert-59": { section: "Culvert design" },
+  "culvert-60": { section: "Culvert design", target: "44", detail: "Check the procedure's headwall thickness of 150 mm (230 mm for pipe dia > 750 mm) and 600 mm embedment into solid bank, or justify the designed alternative." },
+  "culvert-61": { section: "Culvert design", target: "44", detail: "Consider pre-cast headwalls and wingwalls." },
+  "culvert-62": { section: "Culvert design" },
+  "culvert-63": { section: "Road design/interface", target: "58", detail: "Check 1V:2H bank batters or justify another suitable slope." },
+  "culvert-64": { section: "Scour & erosion", target: "51", detail: "Check the procedure's beaching extent of 3 m upstream and downstream and 300 mm above supply level, or justify the calculated extent." },
+  "culvert-65": { section: "Culvert design" },
+  "culvert-66": { section: "Culvert design" },
+  "culvert-67": { section: "Culvert design" },
+  "culvert-68": { section: "Road design/interface", target: "60", detail: "Determine and document the required minimum clear zone." },
+  "culvert-69": { section: "Culvert design" },
+  "culvert-70": { section: "Final QA" },
+  "culvert-71": { section: "Final QA", target: "100", detail: "Confirm the technical report explains all constraints and construction methods." },
+};
+let nextNumber = 102;
+for (const source of designSection.rows.filter(r => !r.heading)) {
+  const destination = SECTION_7_DESTINATIONS[source.id];
+  const section = technical.sections.find(s => s.title === destination.section)!;
+  if (destination.target) {
+    const target = section.rows.find(r => r.no === destination.target || r.id === destination.target)!;
+    if (destination.detail) target.procedure += ` ${destination.detail}`;
+  } else {
+    section.rows.push({ ...source, no: String(nextNumber++) });
+  }
+}
+general.sections = general.sections.filter(s => s !== designSection);
+technical.description = "Technical culvert review with section 7 design checks consolidated into the matching topic. Overlapping checks are combined; procedure-specific details are retained.";
+
 export const blankItem = (): ItemState => ({ answer: "", checked: false, designer: "", reviewer: "", status: "Open" });
 export const questionsOf = (c: Checklist) => c.sections.flatMap(s => s.rows.filter(r => !r.heading));
 export function summarise(c: Checklist, state: ChecklistState) {
