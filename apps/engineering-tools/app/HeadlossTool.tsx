@@ -2,11 +2,42 @@
 
 import { useMemo, useState } from "react";
 
+type PipeSize = { nominal: number; hdpe?: number; rcp?: number; pvc?: number };
+const PIPE_SIZES: PipeSize[] = [
+  { nominal: 150, hdpe: 150, pvc: 153.4 },
+  { nominal: 200, hdpe: 189 },
+  { nominal: 225, hdpe: 213, pvc: 240.8 },
+  { nominal: 250, hdpe: 237 },
+  { nominal: 280, hdpe: 266 },
+  { nominal: 300, rcp: 300, pvc: 303.1 },
+  { nominal: 315, hdpe: 299 },
+  { nominal: 355, hdpe: 334 },
+  { nominal: 375, rcp: 375, pvc: 285.1 },
+  { nominal: 400, hdpe: 369.5 },
+  { nominal: 450, hdpe: 427, rcp: 450 },
+  { nominal: 500, hdpe: 452 },
+  { nominal: 560, hdpe: 506 },
+  { nominal: 600, rcp: 610 },
+  { nominal: 630, hdpe: 597 },
+  { nominal: 710, hdpe: 676 },
+  { nominal: 750, rcp: 760 },
+  { nominal: 800, hdpe: 723.4 },
+  { nominal: 900, hdpe: 858, rcp: 910 },
+  { nominal: 1000, hdpe: 949 },
+  { nominal: 1050, rcp: 1070 },
+  { nominal: 1200, rcp: 1220 },
+  { nominal: 1350, rcp: 1370 },
+  { nominal: 1500, rcp: 1524 },
+  { nominal: 1650, rcp: 1676 },
+  { nominal: 1800, rcp: 1828 },
+];
+const BOX_SIZES = ["375 x 225", "450 x 225", "450 x 300", "600 x 300", "600 x 450", "600 x 600", "750 x 300", "750 x 450", "750 x 600", "750 x 750", "900 x 300", "900 x 450", "900 x 600", "900 x 750", "900 x 900", "1200 x 300", "1200 x 450", "1200 x 600", "1200 x 750", "1200 x 900", "1200 x 1200", "1500 x 600", "1500 x 750", "1500 x 900", "1500 x 1200", "1500 x 1500", "1800 x 600", "1800 x 750", "1800 x 900", "1800 x 1200", "1800 x 1500", "1800 x 1800", "2100 x 600", "2100 x 750", "2100 x 900", "2100 x 1200", "2100 x 1500", "2100 x 1800", "2100 x 2100", "2400 x 600", "2400 x 750", "2400 x 900", "2400 x 1200", "2400 x 1500", "2400 x 1800", "2400 x 2100", "2400 x 2400", "2700 x 600", "2700 x 750", "2700 x 900", "2700 x 1200", "2700 x 1500", "2700 x 1800", "2700 x 2100", "2700 x 2400", "2700 x 2700", "3000 x 600", "3000 x 750", "3000 x 900", "3000 x 1200", "3000 x 1500", "3000 x 1800", "3000 x 2100", "3000 x 2400", "3000 x 2700", "3000 x 3000", "3300 x 600", "3300 x 750", "3300 x 900", "3300 x 1200", "3300 x 1500", "3300 x 1800", "3300 x 2100", "3300 x 2400", "3300 x 2700", "3300 x 3000", "3300 x 3300", "3600 x 600", "3600 x 750", "3600 x 900", "3600 x 1200", "3600 x 1500", "3600 x 1800", "3600 x 2100", "3600 x 2400", "3600 x 2700", "3600 x 3000", "3600 x 3300", "3600 x 3600", "4200 x 600", "4200 x 750", "4200 x 900", "4200 x 1200", "4200 x 1500", "4200 x 1800", "4200 x 2100", "4200 x 2400", "4200 x 2700", "4200 x 3000", "4200 x 3300", "4200 x 3600"];
 const G = 9.81;
 const NU = 1.01e-6; // m2/s, water at about 20 C - matches source workbook
 
 const MATERIALS = {
   HDPE: { roughnessMm: 0.007, manningN: 0.009 },
+  "RCP Box": { roughnessMm: 0.15, manningN: 0.012 },
   RCP: { roughnessMm: 0.15, manningN: 0.012 },
   PVC: { roughnessMm: 0.003, manningN: 0.009 },
   Custom: { roughnessMm: 0.15, manningN: 0.012 },
@@ -65,6 +96,11 @@ function Metric({ name, value }: { name: string; value: string }) {
 export function HeadlossTool() {
   const [material, setMaterial] = useState<Material>("RCP");
   const [diameter, setDiameter] = useState("600");
+  const [size, setSize] = useState("custom");
+  const [width, setWidth] = useState("1200");
+  const [height, setHeight] = useState("900");
+  const isBox = material === "RCP Box";
+  const pipeSizes = PIPE_SIZES.filter((p) => p[material.toLowerCase() as "hdpe" | "rcp" | "pvc"]);
   const [length, setLength] = useState("20");
   const [flow, setFlow] = useState("15");
   const [lossK, setLossK] = useState("1.5");
@@ -74,14 +110,15 @@ export function HeadlossTool() {
   const roughnessMm = material === "Custom" ? num(customRoughness) : MATERIALS[material].roughnessMm;
 
   const result = useMemo<Result | null>(() => {
-    const d = num(diameter) / 1000;
+    const w = num(width) / 1000, h = num(height) / 1000;
+    const d = isBox ? 2 * w * h / (w + h) : num(diameter) / 1000;
     const l = num(length);
     const q = num(flow) / 86.4; // ML/d to m3/s
     const k = num(lossK);
     const e = roughnessMm / 1000;
-    if (![d, l, q, e].every(Number.isFinite) || d <= 0 || l < 0 || q <= 0 || e < 0 || k < 0) return null;
+    if (![d, l, q, e, k].every(Number.isFinite) || d <= 0 || l < 0 || q <= 0 || e < 0 || k < 0 || (isBox && (!(w > 0) || !(h > 0)))) return null;
 
-    const area = Math.PI * d * d / 4;
+    const area = isBox ? w * h : Math.PI * d * d / 4;
     const velocity = q / area;
     const reynolds = velocity * d / NU;
     const frictionFactor = colebrookFrictionFactor(reynolds, e / d);
@@ -92,7 +129,7 @@ export function HeadlossTool() {
     const hydraulicGradient = l > 0 ? frictionLoss / l : 0;
 
     return { flowM3s: q, area, velocity, reynolds, frictionFactor, frictionLoss, minorLoss, totalLoss, hydraulicGradient };
-  }, [diameter, length, flow, lossK, roughnessMm]);
+  }, [diameter, width, height, isBox, length, flow, lossK, roughnessMm]);
 
   const downstreamHgl = result && upstreamHgl.trim() !== "" ? num(upstreamHgl) - result.totalLoss : null;
 
@@ -101,7 +138,7 @@ export function HeadlossTool() {
     const rows = [
       ["Pipe Headloss Calculation", "Value", "Unit"],
       ["Material", material, ""],
-      ["Internal diameter", diameter, "mm"],
+      ...(isBox ? [["Internal width", width, "mm"], ["Internal height", height, "mm"]] : [["Internal diameter", diameter, "mm"]]),
       ["Pipe length", length, "m"],
       ["Design flow", flow, "ML/d"],
       ["Design flow", result.flowM3s, "m3/s"],
@@ -141,14 +178,20 @@ export function HeadlossTool() {
             <div className="calc-fields">
               <label className="calc-field">
                 <span>Pipe material</span>
-                <select value={material} onChange={(e) => setMaterial(e.target.value as Material)}>
+                <select value={material} onChange={(e) => { setMaterial(e.target.value as Material); setSize("custom"); }}>
                   <option value="HDPE">HDPE</option>
-                  <option value="RCP">RCP</option>
+                  <option value="RCP">RCP Circular</option><option value="RCP Box">Concrete box culvert</option>
                   <option value="PVC">PVC</option>
                   <option value="Custom">Custom</option>
                 </select>
               </label>
-              <Field label="Internal diameter" value={diameter} unit="mm" onChange={setDiameter} />
+              <label className="calc-field"><span>Standard size</span><select value={size} onChange={(e) => {
+                const selected = e.target.value; setSize(selected); if (selected === "custom") return;
+                if (isBox) { const [w, h] = selected.split(" x "); setWidth(w); setHeight(h); }
+                else { const row = pipeSizes.find((p) => String(p.nominal) === selected); const id = row?.[material.toLowerCase() as "hdpe" | "rcp" | "pvc"]; if (id) setDiameter(String(id)); }
+              }}><option value="custom">Custom dimensions</option>{isBox ? BOX_SIZES.map((box) => <option key={box} value={box}>{box.replace(" x ", " × ")} mm</option>) : pipeSizes.map((p) => <option key={p.nominal} value={p.nominal}>DN{p.nominal}</option>)}</select></label>
+              {isBox ? <><Field label="Internal width" value={width} unit="mm" onChange={(v) => { setWidth(v); setSize("custom"); }} /><Field label="Internal height" value={height} unit="mm" onChange={(v) => { setHeight(v); setSize("custom"); }} /></> : <Field label="Internal diameter" value={diameter} unit="mm" onChange={(v) => { setDiameter(v); setSize("custom"); }} />}
+              <p className="answer-note">Full-flow closed conduits only. Boxes use hydraulic diameter 4A/P. Box presets are nominal internal sizes from the existing culvert workbook list; confirm actual manufacturer dimensions. Circular pipe IDs match Pipeline HGL.</p>
               <Field label="Pipe length" value={length} unit="m" onChange={setLength} />
               <Field label="Design flow" value={flow} unit="ML/d" hint={result ? `${fmt(result.flowM3s, 4)} m³/s` : undefined} onChange={setFlow} />
               {material === "Custom" && <Field label="Absolute roughness, k" value={customRoughness} unit="mm" onChange={setCustomRoughness} />}
