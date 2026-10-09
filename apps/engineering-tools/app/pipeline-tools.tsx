@@ -113,26 +113,27 @@ function Metric({ name, value }: { name: string; value: string }) {
 export function PipeSizingTool() {
   const [flow, setFlow] = useState("15");
   const [length, setLength] = useState("25");
-  const [material, setMaterial] = useState<Material>("HDPE");
+  const [material, setMaterial] = useState<Material | "RCP Box">("HDPE");
   const [k, setK] = useState("1.5");
   const [maxVelocity, setMaxVelocity] = useState("1.5");
   const [maxHeadloss, setMaxHeadloss] = useState("0.15");
   const [barrels, setBarrels] = useState("1");
+  const [boxSizes, setBoxSizes] = useState("600 × 300, 600 × 450, 600 × 600, 900 × 450, 900 × 600, 900 × 900, 1200 × 600, 1200 × 900, 1200 × 1200, 1500 × 900, 1500 × 1200, 1800 × 1200, 1800 × 1500, 2100 × 1200, 2400 × 1200");
 
-  const candidates = useMemo(() => PIPE_SIZES
+  const candidates = useMemo(() => material==="RCP Box" ? boxSizes.split(",").map(item=>{const match=item.trim().match(/^(\\d+)\\s*[×xX]\\s*(\\d+)$/);if(!match)return null;const w=Number(match[1]),h=Number(match[2]);const area=w*h/1e6,dh=2*w*h/(w+h)/1000;if(!(area>0&&dh>0))return null;const result=calcHydraulic(n(flow),n(length),area,dh,Math.max(1,n(barrels)),ROUGHNESS_MM.RCP,n(k));const velocityOk=result.velocity<=n(maxVelocity),headlossOk=result.total<=n(maxHeadloss);return {nominal:`${w} × ${h}`,id:`${w} × ${h}`, ...result,velocityOk,headlossOk,ok:velocityOk&&headlossOk};}).filter((x):x is NonNullable<typeof x>=>Boolean(x)) : PIPE_SIZES
     .map((p) => {
       const id = idFor(material, p.nominal);
       if (!id) return null;
       const result = calc(n(flow), n(length), id, Math.max(1, n(barrels)), ROUGHNESS_MM[material], n(k));
       const velocityOk = result.velocity <= n(maxVelocity);
       const headlossOk = result.total <= n(maxHeadloss);
-      return { nominal: p.nominal, id, ...result, velocityOk, headlossOk, ok: velocityOk && headlossOk };
+      return { nominal: String(p.nominal), id: String(id), ...result, velocityOk, headlossOk, ok: velocityOk && headlossOk };
     })
-    .filter((x): x is NonNullable<typeof x> => Boolean(x)), [flow, length, material, k, maxVelocity, maxHeadloss, barrels]);
+    .filter((x): x is NonNullable<typeof x> => Boolean(x)), [flow, length, material, k, maxVelocity, maxHeadloss, barrels, boxSizes]);
 
   const recommended = candidates.find((x) => x.ok) ?? null;
   const exportCsv = () => {
-    const rows = [["Nominal diameter (mm)", "Internal diameter (mm)", "Velocity (m/s)", "Friction loss (m)", "Minor loss (m)", "Total headloss (m)", "Result"],
+    const rows = [["Nominal size (mm)", "Internal dimensions (mm)", "Velocity (m/s)", "Friction loss (m)", "Minor loss (m)", "Total headloss (m)", "Result"],
       ...candidates.map((x) => [x.nominal, x.id, x.velocity, x.hf, x.hs, x.total, x.ok ? "PASS" : "FAIL"])];
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([rows.map((r) => r.join(",")).join("\n")], { type: "text/csv" }));
@@ -144,12 +145,12 @@ export function PipeSizingTool() {
     <div className="calc-layout"><div>
       <section className="calc-card"><div className="calc-card-title"><b>1</b><h2>Design criteria</h2></div><div className="calc-fields">
         <Field label="Design flow" value={flow} unit="ML/d" onChange={setFlow}/><Field label="Pipe length" value={length} unit="m" onChange={setLength}/>
-        <label className="calc-field"><span>Pipe material</span><select value={material} onChange={(e) => setMaterial(e.target.value as Material)}><option>HDPE</option><option>RCP</option><option>PVC</option></select></label>
-        <Field label="Number of barrels" value={barrels} onChange={setBarrels}/><Field label="Combined minor-loss K" value={k} hint="Entry + exit default = 1.5" onChange={setK}/>
+        <label className="calc-field"><span>Pipe material</span><select value={material} onChange={(e) => setMaterial(e.target.value as Material | "RCP Box")}><option>HDPE</option><option>RCP</option><option>PVC</option><option value="RCP Box">RCP Box Culvert</option></select></label>
+        {material==="RCP Box"&&<label className="calc-field" style={{gridColumn:"1 / -1"}}><span>Box culvert sizes (internal width × height, mm)</span><textarea rows={3} value={boxSizes} onChange={e=>setBoxSizes(e.target.value)}/><small>Editable candidate dimensions; confirm actual internal sizes against the selected manufacturer’s catalogue.</small></label>}<Field label="Number of barrels" value={barrels} onChange={setBarrels}/><Field label="Combined minor-loss K" value={k} hint="Entry + exit default = 1.5" onChange={setK}/>
         <Field label="Maximum velocity" value={maxVelocity} unit="m/s" onChange={setMaxVelocity}/><Field label="Maximum total headloss" value={maxHeadloss} unit="m" onChange={setMaxHeadloss}/>
       </div></section>
-      <section className="calc-card"><div className="calc-card-title"><b>2</b><h2>Candidate pipe sizes</h2></div><div className="storage-table"><table><thead><tr><th>Nom.</th><th>ID</th><th>Velocity</th><th>hf</th><th>hs</th><th>Total</th><th>Check</th></tr></thead><tbody>{candidates.map((x) => <tr key={x.nominal}><td>DN{x.nominal}</td><td>{fmt(x.id, 1)} mm</td><td>{fmt(x.velocity)} m/s</td><td>{fmt(x.hf)} m</td><td>{fmt(x.hs)} m</td><td><strong>{fmt(x.total)} m</strong></td><td><span className={x.ok ? "pass" : "fail"}>{x.ok ? "✓ PASS" : `${x.velocityOk ? "" : "Velocity "}${x.headlossOk ? "" : "Headloss"}`}</span></td></tr>)}</tbody></table></div></section>
-    </div><aside className="results-card"><p className="eyebrow">RECOMMENDED SIZE</p><div className="result-main"><strong>{recommended ? `DN${recommended.nominal}` : "—"}</strong><span>{recommended ? material : "No passing size"}</span></div>{recommended && <><Metric name="Internal diameter" value={`${fmt(recommended.id, 1)} mm`}/><Metric name="Velocity" value={`${fmt(recommended.velocity)} m/s`}/><Metric name="Friction loss" value={`${fmt(recommended.hf)} m`}/><Metric name="Minor loss" value={`${fmt(recommended.hs)} m`}/><Metric name="Total headloss" value={`${fmt(recommended.total)} m`}/><Metric name="Darcy friction factor" value={fmt(recommended.f, 5)}/></>}<p className="answer-note">Pipe IDs and roughness values are taken from the uploaded GMW headloss workbook. Confirm pressure class and manufacturer dimensions before issue for construction.</p><button className="download-btn" onClick={exportCsv}>↓ Export comparison CSV</button></aside></div>
+      <section className="calc-card"><div className="calc-card-title"><b>2</b><h2>Candidate pipe sizes</h2></div><div className="storage-table"><table><thead><tr><th>Nominal size</th><th>Internal size</th><th>Velocity</th><th>hf</th><th>hs</th><th>Total</th><th>Check</th></tr></thead><tbody>{candidates.map((x) => <tr key={x.nominal}><td>{material==="RCP Box"?x.nominal:`DN${x.nominal}`}</td><td>{material==="RCP Box"?x.id:`${x.id} mm`}</td><td>{fmt(x.velocity)} m/s</td><td>{fmt(x.hf)} m</td><td>{fmt(x.hs)} m</td><td><strong>{fmt(x.total)} m</strong></td><td><span className={x.ok ? "pass" : "fail"}>{x.ok ? "✓ PASS" : `${x.velocityOk ? "" : "Velocity "}${x.headlossOk ? "" : "Headloss"}`}</span></td></tr>)}</tbody></table></div></section>
+    </div><aside className="results-card"><p className="eyebrow">RECOMMENDED SIZE</p><div className="result-main"><strong>{recommended ? material==="RCP Box"?`${recommended.nominal} mm`:`DN${recommended.nominal}` : "—"}</strong><span>{recommended ? material : "No passing size"}</span></div>{recommended && <><Metric name="Internal diameter" value={material==="RCP Box"?`${recommended.id} mm`:`${recommended.id} mm`}/><Metric name="Velocity" value={`${fmt(recommended.velocity)} m/s`}/><Metric name="Friction loss" value={`${fmt(recommended.hf)} m`}/><Metric name="Minor loss" value={`${fmt(recommended.hs)} m`}/><Metric name="Total headloss" value={`${fmt(recommended.total)} m`}/><Metric name="Darcy friction factor" value={fmt(recommended.f, 5)}/></>}<p className="answer-note">Circular pipe IDs and roughness values are based on the GMW headloss workbook. Box candidates are editable nominal internal dimensions and use a full-flow hydraulic diameter (4A/P) with RCP roughness. Confirm catalogue dimensions and applicable hydraulic regime.</p><button className="download-btn" onClick={exportCsv}>↓ Export comparison CSV</button></aside></div>
   </div>;
 }
 
