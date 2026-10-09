@@ -9,7 +9,10 @@ export type SavedProject = {
   name: string;
   note?: string;
   savedAt: number;
+  inputs?: SavedInput[];
 };
+
+export type SavedInput = { index: number; tag: string; type: string; value: string; checked?: boolean };
 
 export const SAVED_PROJECTS_KEY = "engineering-tools-saved-projects";
 
@@ -28,30 +31,30 @@ export function persistSavedProjects(projects: SavedProject[]) {
   window.localStorage.setItem(SAVED_PROJECTS_KEY, JSON.stringify(projects));
 }
 
-export function SavedProjectsPanel({ projects, onOpen, onDelete, onBack }: { projects: SavedProject[]; onOpen: (toolView: string) => void; onDelete: (id: string) => void; onBack: () => void }) {
+export function SavedProjectsPanel({ projects, onOpen, onDelete, onBack }: { projects: SavedProject[]; onOpen: (project: SavedProject) => void; onDelete: (id: string) => void; onBack: () => void }) {
   return <div className="panel-view">
     <div className="dashboard-section-head"><div><button className="dashboard-back" onClick={onBack}>← Dashboard</button><h2>Saved Projects</h2></div></div>
     {!projects.length ? <div className="dashboard-empty">No saved projects yet. Open a tool and use "Save as project" to keep it here for quick access.</div> : <div className="saved-project-list">
       {projects.slice().sort((a, b) => b.savedAt - a.savedAt).map((p) => <div className="saved-project-card" key={p.id}>
         <div><strong>{p.name}</strong><small>{p.toolLabel}{p.note ? ` · ${p.note}` : ""}</small><em>{new Date(p.savedAt).toLocaleDateString()}</em></div>
-        <div className="saved-project-actions"><button onClick={() => onOpen(p.toolView)}>Open →</button><button className="danger" onClick={() => onDelete(p.id)}>Delete</button></div>
+        <div className="saved-project-actions"><button onClick={() => onOpen(p)}>Open →</button><button className="danger" onClick={() => onDelete(p.id)}>Delete</button></div>
       </div>)}
     </div>}
   </div>;
 }
 
-export function SaveProjectControl({ toolView, toolLabel, onSave }: { toolView: string; toolLabel: string; onSave: (project: SavedProject) => void }) {
+export function SaveProjectControl({ toolView, toolLabel, onSave, existing }: { toolView: string; toolLabel: string; onSave: (project: SavedProject) => void; existing?: SavedProject }) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [note, setNote] = useState("");
 
-  if (!open) return <button className="save-project-trigger" onClick={() => { setOpen(true); setName(toolLabel); }}>☆ Save as project</button>;
+  if (!open) return <button className="save-project-trigger" onClick={() => { setOpen(true); setName(existing?.name ?? toolLabel); setNote(existing?.note ?? ""); }}>{existing ? "☆ Update saved project" : "☆ Save as project"}</button>;
 
   return <div className="save-project-form">
     <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Project name" />
     <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (optional, e.g. site address)" />
     <button disabled={!name.trim()} onClick={() => {
-      onSave({ id: `${Date.now()}`, toolView, toolLabel, name: name.trim(), note: note.trim() || undefined, savedAt: Date.now() });
+      onSave({ id: existing?.id ?? `${Date.now()}`, toolView, toolLabel, name: name.trim(), note: note.trim() || undefined, savedAt: Date.now() });
       setOpen(false); setName(""); setNote("");
     }}>Save</button>
     <button className="ghost" onClick={() => setOpen(false)}>Cancel</button>
