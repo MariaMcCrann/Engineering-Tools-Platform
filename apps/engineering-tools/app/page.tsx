@@ -113,7 +113,6 @@ export default function Home() {
       if(el instanceof HTMLInputElement && (el.type==="checkbox"||el.type==="radio")){
         const setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"checked")?.set;
         setter?.call(el,Boolean(saved.checked));
-        el.dispatchEvent(new Event("click",{bubbles:true}));
         el.dispatchEvent(new Event("change",{bubbles:true}));
       }else{
         const proto=el instanceof HTMLTextAreaElement?HTMLTextAreaElement.prototype:el instanceof HTMLSelectElement?HTMLSelectElement.prototype:HTMLInputElement.prototype;
