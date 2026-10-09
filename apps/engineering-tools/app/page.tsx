@@ -94,7 +94,7 @@ export default function Home() {
   useEffect(() => { setSavedProjects(loadSavedProjects()); }, []);
 
   const saveProject = (project: SavedProject) => {
-    const controls = Array.from(toolRoot.current?.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>("input, select, textarea") ?? []);
+    const controls = Array.from(toolRoot.current?.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>("input, select, textarea") ?? []).filter(el=>!el.closest("header, .save-project-form"));
     const inputs: SavedInput[] = controls.map((el,index)=>({index,tag:el.tagName,type:el.type,value:el.value,checked:el instanceof HTMLInputElement ? el.checked : undefined}));
     project = {...project,inputs};
     setActiveProject(project);
@@ -106,20 +106,24 @@ export default function Home() {
   };
   useEffect(() => {
     if(!activeProject?.inputs?.length || !toolRoot.current || view!==activeProject.toolView)return;
-    const controls=Array.from(toolRoot.current.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>("input, select, textarea"));
-    for(const saved of activeProject.inputs){
-      const el=controls[saved.index];
-      if(!el||el.tagName!==saved.tag||el.type!==saved.type||el.type==="file")continue;
-      if(el instanceof HTMLInputElement && (el.type==="checkbox"||el.type==="radio")){
-        const setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"checked")?.set;
-        setter?.call(el,Boolean(saved.checked));
-        el.dispatchEvent(new Event("change",{bubbles:true}));
-      }else{
-        const proto=el instanceof HTMLTextAreaElement?HTMLTextAreaElement.prototype:el instanceof HTMLSelectElement?HTMLSelectElement.prototype:HTMLInputElement.prototype;
-        Object.getOwnPropertyDescriptor(proto,"value")?.set?.call(el,saved.value);
-        el.dispatchEvent(new Event(el instanceof HTMLSelectElement?"change":"input",{bubbles:true}));
+    const restore=()=>{
+      const controls=Array.from(toolRoot.current?.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>("input, select, textarea") ?? []).filter(el=>!el.closest("header, .save-project-form"));
+      for(const saved of activeProject.inputs ?? []){
+        const el=controls[saved.index];
+        if(!el||el.tagName!==saved.tag||el.type!==saved.type||el.type==="file")continue;
+        if(el instanceof HTMLInputElement && (el.type==="checkbox"||el.type==="radio")){
+          if(el.checked!==Boolean(saved.checked))el.click();
+        }else if(el.value!==saved.value){
+          const proto=el instanceof HTMLTextAreaElement?HTMLTextAreaElement.prototype:el instanceof HTMLSelectElement?HTMLSelectElement.prototype:HTMLInputElement.prototype;
+          Object.getOwnPropertyDescriptor(proto,"value")?.set?.call(el,saved.value);
+          el.dispatchEvent(new Event(el instanceof HTMLSelectElement?"change":"input",{bubbles:true}));
+        }
       }
-    }
+    };
+    restore();
+    const retry=window.setTimeout(restore,50);
+    const finalRetry=window.setTimeout(restore,200);
+    return()=>{window.clearTimeout(retry);window.clearTimeout(finalRetry);};
   },[activeProject,projectRevision,view]);
   const deleteProject = (id: string) => {
     setSavedProjects((prev) => {
