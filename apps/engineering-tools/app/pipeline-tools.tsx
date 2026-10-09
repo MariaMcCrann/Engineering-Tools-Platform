@@ -120,7 +120,7 @@ export function PipeSizingTool() {
   const [barrels, setBarrels] = useState("1");
   const [boxSizes, setBoxSizes] = useState("600 × 300, 600 × 450, 600 × 600, 900 × 450, 900 × 600, 900 × 900, 1200 × 600, 1200 × 900, 1200 × 1200, 1500 × 900, 1500 × 1200, 1800 × 1200, 1800 × 1500, 2100 × 1200, 2400 × 1200");
 
-  const candidates = useMemo(() => material==="RCP Box" ? boxSizes.split(",").map(item=>{const match=item.trim().match(/^(\\d+)\\s*[×xX]\\s*(\\d+)$/);if(!match)return null;const w=Number(match[1]),h=Number(match[2]);const area=w*h/1e6,dh=2*w*h/(w+h)/1000;if(!(area>0&&dh>0))return null;const result=calcHydraulic(n(flow),n(length),area,dh,Math.max(1,n(barrels)),ROUGHNESS_MM.RCP,n(k));const velocityOk=result.velocity<=n(maxVelocity),headlossOk=result.total<=n(maxHeadloss);return {nominal:`${w} × ${h}`,id:`${w} × ${h}`, ...result,velocityOk,headlossOk,ok:velocityOk&&headlossOk};}).filter((x):x is NonNullable<typeof x>=>Boolean(x)) : PIPE_SIZES
+  const candidates = useMemo(() => material==="RCP Box" ? boxSizes.split(",").map(item=>{const match=item.trim().match(/^(\d+)\s*[×xX]\s*(\d+)$/);if(!match)return null;const w=Number(match[1]),h=Number(match[2]);const area=w*h/1e6,dh=2*w*h/(w+h)/1000;if(!(area>0&&dh>0))return null;const result=calcHydraulic(n(flow),n(length),area,dh,Math.max(1,n(barrels)),ROUGHNESS_MM.RCP,n(k));const velocityOk=result.velocity<=n(maxVelocity),headlossOk=result.total<=n(maxHeadloss);return {nominal:`${w} × ${h}`,id:`${w} × ${h}`, ...result,velocityOk,headlossOk,ok:velocityOk&&headlossOk};}).filter((x):x is NonNullable<typeof x>=>Boolean(x)) : PIPE_SIZES
     .map((p) => {
       const id = idFor(material, p.nominal);
       if (!id) return null;
