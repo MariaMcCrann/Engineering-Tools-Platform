@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { DesignReviewTool } from "./DesignReviewTool";
 import { DesignChecklistTool } from "./DesignChecklistTool";
 import { ChannelFlowTool, ProposalTool, StageStorageTool } from "./EngineeringTools";
@@ -27,7 +27,7 @@ import { SedimentPondTool } from "./SedimentPondTool";
 import { RegulatorDesignTool } from "./RegulatorDesignTool";
 import { PipelinePumpSizingTool } from "./PipelinePumpSizingTool";
 import { EngineeringDashboard, DashboardCategory, DashboardTool, HANDBOOK_ITEMS } from "./EngineeringDashboard";
-import { SavedProjectsPanel, SaveProjectControl, CalculationTemplatesPanel, SavedProject, loadSavedProjects, persistSavedProjects } from "./WorkspacePanels";
+import { SavedProjectsPanel, SaveProjectControl, CalculationTemplatesPanel, SavedProject, SavedInput, loadSavedProjects, persistSavedProjects } from "./WorkspacePanels";
 
 type ViewKey = "design-review" | "design-checklist" | "tools" | "saved-projects" | "templates" | "rorb" | "rational" | "channel" | "storage" | "overland" | "rising" | "gsdm" | "spillway" | "culvert" | "headloss" | "pipe-sizing" | "pipeline-hgl" | "rock-protection" | "headwall-concrete" | "base-slab-concrete" | "broad-crested-weir" | "drowned-sluice-gate" | "thrust-at-bends" | "buried-flexible-pipe" | "v-notch-weir" | "pit-surge" | "pump-duty-point" | "cantilever-wall" | "sediment-pond" | "regulator-design" | "pipeline-pump-sizing" | "proposal" | "site-intelligence";
 type ToolEntry = DashboardTool & { view: Exclude<ViewKey, "tools" | "saved-projects" | "templates"> };
@@ -86,17 +86,45 @@ export default function Home() {
   const [showHandbook, setShowHandbook] = useState(false);
   const [savedProjects, setSavedProjects] = useState<SavedProject[]>([]);
   const [dashboardKey, setDashboardKey] = useState(0);
-  const goHome = () => { setView("tools"); setDashboardKey((k) => k + 1); };
+  const [activeProject, setActiveProject] = useState<SavedProject | null>(null);
+  const [projectRevision, setProjectRevision] = useState(0);
+  const toolRoot = useRef<HTMLDivElement>(null);
+  const goHome = () => { setActiveProject(null); setView("tools"); setDashboardKey((k) => k + 1); };
 
   useEffect(() => { setSavedProjects(loadSavedProjects()); }, []);
 
   const saveProject = (project: SavedProject) => {
+    const controls = Array.from(toolRoot.current?.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>("input, select, textarea") ?? []).filter(el=>!el.closest("header, .save-project-form"));
+    const inputs: SavedInput[] = controls.map((el,index)=>({index,tag:el.tagName,type:el.type,value:el.value,checked:el instanceof HTMLInputElement ? el.checked : undefined}));
+    project = {...project,inputs};
+    setActiveProject(project);
     setSavedProjects((prev) => {
-      const next = [...prev, project];
+      const next = [...prev.filter(p=>p.id!==project.id), project];
       persistSavedProjects(next);
       return next;
     });
   };
+  useEffect(() => {
+    if(!activeProject?.inputs?.length || !toolRoot.current || view!==activeProject.toolView)return;
+    const restore=()=>{
+      const controls=Array.from(toolRoot.current?.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>("input, select, textarea") ?? []).filter(el=>!el.closest("header, .save-project-form"));
+      for(const saved of activeProject.inputs ?? []){
+        const el=controls[saved.index];
+        if(!el||el.tagName!==saved.tag||el.type!==saved.type||el.type==="file")continue;
+        if(el instanceof HTMLInputElement && (el.type==="checkbox"||el.type==="radio")){
+          if(el.checked!==Boolean(saved.checked))el.click();
+        }else if(el.value!==saved.value){
+          const proto=el instanceof HTMLTextAreaElement?HTMLTextAreaElement.prototype:el instanceof HTMLSelectElement?HTMLSelectElement.prototype:HTMLInputElement.prototype;
+          Object.getOwnPropertyDescriptor(proto,"value")?.set?.call(el,saved.value);
+          el.dispatchEvent(new Event(el instanceof HTMLSelectElement?"change":"input",{bubbles:true}));
+        }
+      }
+    };
+    restore();
+    const retry=window.setTimeout(restore,50);
+    const finalRetry=window.setTimeout(restore,200);
+    return()=>{window.clearTimeout(retry);window.clearTimeout(finalRetry);};
+  },[activeProject,projectRevision,view]);
   const deleteProject = (id: string) => {
     setSavedProjects((prev) => {
       const next = prev.filter((p) => p.id !== id);
@@ -107,13 +135,13 @@ export default function Home() {
 
   const allTools = TOOL_CATEGORIES.flatMap((category) => category.tools) as ToolEntry[];
   const currentTool = allTools.find((tool) => tool.view === view);
-  const openTool = (tool: DashboardTool) => { if (tool.disabled) return; if (tool.externalUrl) { window.open(tool.externalUrl, "_blank", "noopener,noreferrer"); return; } setView(tool.view as ViewKey); };
+  const openTool = (tool: DashboardTool) => { setActiveProject(null); if (tool.disabled) return; if (tool.externalUrl) { window.open(tool.externalUrl, "_blank", "noopener,noreferrer"); return; } setView(tool.view as ViewKey); };
 
   const toolHeader = (label: string, key: Exclude<ViewKey, "tools" | "saved-projects" | "templates">) => (
-    <header className="hub-header"><span>{label}</span><SaveProjectControl toolView={key} toolLabel={label} onSave={saveProject} /></header>
+    <header className="hub-header"><span>{label}</span><SaveProjectControl toolView={key} toolLabel={label} onSave={saveProject} existing={activeProject?.toolView===key?activeProject:undefined} /></header>
   );
 
-  const selectedTool = view === "saved-projects" ? <SavedProjectsPanel projects={savedProjects} onOpen={(v) => setView(v as ViewKey)} onDelete={deleteProject} onBack={() => setView("tools")}/>
+  const selectedTool = view === "saved-projects" ? <SavedProjectsPanel projects={savedProjects} onOpen={(project) => {setActiveProject(project);setProjectRevision(v=>v+1);setView(project.toolView as ViewKey);}} onDelete={deleteProject} onBack={() => setView("tools")}/>
     : view === "design-review" ? <DesignReviewTool/>
     : view === "design-checklist" ? <>{toolHeader("Design Checklist", "design-checklist")}<DesignChecklistTool/></>
     : view === "templates" ? <CalculationTemplatesPanel onOpen={(v) => setView(v as ViewKey)} onBack={() => setView("tools")}/>
@@ -164,7 +192,7 @@ export default function Home() {
       </nav>
       <div className="version">ENGINEERING TOOLS<br/><strong>Growing toolkit</strong></div>
     </aside>
-    <section className="workspace">{view === "tools" ? <EngineeringDashboard key={dashboardKey} categories={TOOL_CATEGORIES} onOpenTool={openTool} onOpenHandbook={() => setShowHandbook(true)} onOpenSaved={() => setView("saved-projects")} onOpenTemplates={() => setView("templates")}/> : selectedTool}</section>
+    <section className="workspace">{view === "tools" ? <EngineeringDashboard key={dashboardKey} categories={TOOL_CATEGORIES} onOpenTool={openTool} onOpenHandbook={() => setShowHandbook(true)} onOpenSaved={() => setView("saved-projects")} onOpenTemplates={() => setView("templates")}/> : <div key={`${view}-${projectRevision}`} ref={toolRoot}>{selectedTool}</div>}</section>
 
     {showHandbook && <div className="dashboard-modal-backdrop" onClick={() => setShowHandbook(false)}><div className="dashboard-modal handbook-modal" onClick={(e) => e.stopPropagation()}><button className="modal-close" onClick={() => setShowHandbook(false)}>×</button><p className="eyebrow">TECHNICAL BASIS & TRACEABILITY</p><h2>Engineering Handbook</h2><p className="modal-lead">A single place for the source documents, manuals, standards and engineering methods used by the tools.</p><div className="handbook-list">{HANDBOOK_ITEMS.map((item) => <div key={item.title}><span>▤</span><div><strong>{item.title}</strong><small>{item.detail}{item.size ? ` · PDF · ${item.size}` : ""}</small>{item.href && <div className="handbook-document-actions"><a href={item.href} target="_blank" rel="noopener noreferrer">Open PDF ↗</a><a href={item.href} download>↓ Download</a></div>}</div></div>)}</div><div className="handbook-note"><strong>Next step</strong><span>Each calculator can link directly to the references and assumptions that support its methodology.</span></div></div></div>}
   </main>;
