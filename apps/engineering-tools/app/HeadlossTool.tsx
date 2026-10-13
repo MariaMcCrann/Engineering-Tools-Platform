@@ -47,6 +47,8 @@ type Material = keyof typeof MATERIALS;
 
 type Result = {
   flowM3s: number;
+  totalFlowM3s: number;
+  units: number;
   area: number;
   velocity: number;
   reynolds: number;
@@ -103,6 +105,7 @@ export function HeadlossTool() {
   const pipeSizes = PIPE_SIZES.filter((p) => p[material.toLowerCase() as "hdpe" | "rcp" | "pvc"]);
   const [length, setLength] = useState("20");
   const [flow, setFlow] = useState("15");
+  const [units, setUnits] = useState("1");
   const [lossK, setLossK] = useState("1.5");
   const [customRoughness, setCustomRoughness] = useState("0.15");
   const [upstreamHgl, setUpstreamHgl] = useState("");
@@ -113,7 +116,10 @@ export function HeadlossTool() {
     const w = num(width) / 1000, h = num(height) / 1000;
     const d = isBox ? 2 * w * h / (w + h) : num(diameter) / 1000;
     const l = num(length);
-    const q = num(flow) / 86.4; // ML/d to m3/s
+    const totalFlowM3s = num(flow) / 86.4; // total ML/d to m3/s
+    const unitCount = num(units);
+    if (!Number.isInteger(unitCount) || unitCount < 1) return null;
+    const q = totalFlowM3s / unitCount;
     const k = num(lossK);
     const e = roughnessMm / 1000;
     if (![d, l, q, e, k].every(Number.isFinite) || d <= 0 || l < 0 || q <= 0 || e < 0 || k < 0 || (isBox && (!(w > 0) || !(h > 0)))) return null;
@@ -128,8 +134,8 @@ export function HeadlossTool() {
     const totalLoss = frictionLoss + minorLoss;
     const hydraulicGradient = l > 0 ? frictionLoss / l : 0;
 
-    return { flowM3s: q, area, velocity, reynolds, frictionFactor, frictionLoss, minorLoss, totalLoss, hydraulicGradient };
-  }, [diameter, width, height, isBox, length, flow, lossK, roughnessMm]);
+    return { flowM3s: q, totalFlowM3s, units: unitCount, area, velocity, reynolds, frictionFactor, frictionLoss, minorLoss, totalLoss, hydraulicGradient };
+  }, [diameter, width, height, isBox, length, flow, units, lossK, roughnessMm]);
 
   const downstreamHgl = result && upstreamHgl.trim() !== "" ? num(upstreamHgl) - result.totalLoss : null;
 
@@ -140,8 +146,12 @@ export function HeadlossTool() {
       ["Material", material, ""],
       ...(isBox ? [["Internal width", width, "mm"], ["Internal height", height, "mm"]] : [["Internal diameter", diameter, "mm"]]),
       ["Pipe length", length, "m"],
-      ["Design flow", flow, "ML/d"],
-      ["Design flow", result.flowM3s, "m3/s"],
+      ["Total design flow", flow, "ML/d"],
+      ["Total design flow", result.totalFlowM3s, "m3/s"],
+      ["Number of parallel units", result.units, ""],
+      ["Flow per unit", num(flow) / result.units, "ML/d"],
+      ["Flow per unit", result.flowM3s, "m3/s"],
+      ["Flow area per unit", result.area, "m2"],
       ["Absolute roughness", roughnessMm, "mm"],
       ["Minor loss coefficient K", lossK, ""],
       ["Velocity", result.velocity, "m/s"],
@@ -193,7 +203,8 @@ export function HeadlossTool() {
               {isBox ? <><Field label="Internal width" value={width} unit="mm" onChange={(v) => { setWidth(v); setSize("custom"); }} /><Field label="Internal height" value={height} unit="mm" onChange={(v) => { setHeight(v); setSize("custom"); }} /></> : <Field label="Internal diameter" value={diameter} unit="mm" onChange={(v) => { setDiameter(v); setSize("custom"); }} />}
               <p className="answer-note">Full-flow closed conduits only. Boxes use hydraulic diameter 4A/P. Box presets are nominal internal sizes from the existing culvert workbook list; confirm actual manufacturer dimensions. Circular pipe IDs match Pipeline HGL.</p>
               <Field label="Pipe length" value={length} unit="m" onChange={setLength} />
-              <Field label="Design flow" value={flow} unit="ML/d" hint={result ? `${fmt(result.flowM3s, 4)} m³/s` : undefined} onChange={setFlow} />
+              <label className="calc-field"><span>Number of parallel units</span><small>Identical barrels or cells sharing the total flow equally</small><input type="number" min="1" step="1" value={units} onChange={(e) => setUnits(e.target.value)} /></label>
+              <Field label="Total design flow" value={flow} unit="ML/d" hint={result ? `${fmt(result.totalFlowM3s, 4)} m³/s total; ${fmt(num(flow) / result.units, 3)} ML/d per unit` : undefined} onChange={setFlow} />
               {material === "Custom" && <Field label="Absolute roughness, k" value={customRoughness} unit="mm" onChange={setCustomRoughness} />}
             </div>
           </section>
@@ -201,9 +212,9 @@ export function HeadlossTool() {
           <section className="calc-card">
             <div className="calc-card-title"><b>2</b><h2>Minor losses</h2></div>
             <div className="calc-fields">
-              <Field label="Combined loss coefficient, K" value={lossK} hint="Workbook default is 1.5 for entry + exit" onChange={setLossK} />
+              <Field label="Combined loss coefficient, K" value={lossK} hint="Per flow path: 1.5 for entry + exit; this workbook uses 1.6 for twin cells" onChange={setLossK} />
             </div>
-            <p className="answer-note">Use the combined K for entrance, exit, bends, valves or other fittings included in the reach.</p>
+            <p className="answer-note">Use the combined K for one flow path, including entrance, exit, bends, valves or other fittings. K remains editable and is not multiplied by the number of parallel units.</p>
           </section>
 
           <section className="calc-card">
@@ -225,7 +236,9 @@ export function HeadlossTool() {
               <span className={result.reynolds >= 4000 ? "pass" : "warn"}>{result.reynolds >= 4000 ? "✓ Turbulent flow" : "! Non-turbulent regime"}</span>
             </div>
             <Metric name="Velocity" value={`${fmt(result.velocity)} m/s`} />
-            <Metric name="Flow area" value={`${fmt(result.area, 4)} m²`} />
+            <Metric name="Number of parallel units" value={String(result.units)} />
+            <Metric name="Flow per unit" value={`${fmt(num(flow) / result.units)} ML/d`} />
+            <Metric name="Flow area per unit" value={`${fmt(result.area, 4)} m²`} />
             <Metric name="Reynolds number" value={fmt(result.reynolds, 0)} />
             <Metric name="Absolute roughness" value={`${fmt(roughnessMm, 3)} mm`} />
             <Metric name="Darcy friction factor" value={fmt(result.frictionFactor, 5)} />
@@ -233,7 +246,7 @@ export function HeadlossTool() {
             <Metric name="Minor losses, hs" value={`${fmt(result.minorLoss)} m`} />
             <Metric name="Hydraulic gradient" value={`${fmt(result.hydraulicGradient, 5)} m/m`} />
             {downstreamHgl !== null && Number.isFinite(downstreamHgl) && <Metric name="Downstream HGL" value={`${fmt(downstreamHgl)} m AHD`} />}
-            <p className="answer-note">Colebrook–White calculation uses water kinematic viscosity 1.01×10⁻⁶ m²/s, consistent with the source spreadsheet at approximately 20°C.</p>
+            <p className="answer-note">Headloss applies across the parallel units and is not added between barrels. Equal flow sharing assumes identical dimensions, lengths and loss coefficients. Colebrook–White calculation uses water kinematic viscosity 1.01×10⁻⁶ m²/s, consistent with the source spreadsheet at approximately 20°C.</p>
             <button className="download-btn" onClick={exportCsv}>↓ Export CSV</button>
           </>}
         </aside>
