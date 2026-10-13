@@ -50,6 +50,9 @@ type Result = {
   totalFlowM3s: number;
   units: number;
   area: number;
+  wettedPerimeter: number;
+  hydraulicDiameter: number;
+  depth: number;
   velocity: number;
   reynolds: number;
   frictionFactor: number;
@@ -109,12 +112,35 @@ export function HeadlossTool() {
   const [lossK, setLossK] = useState("1.5");
   const [customRoughness, setCustomRoughness] = useState("0.15");
   const [upstreamHgl, setUpstreamHgl] = useState("");
+  const [flowCondition, setFlowCondition] = useState("full");
+  const [invertRl, setInvertRl] = useState("");
+  const [waterRl, setWaterRl] = useState("");
+  const [soffitRl, setSoffitRl] = useState("");
+  const isPartial = flowCondition === "partial";
 
   const roughnessMm = material === "Custom" ? num(customRoughness) : MATERIALS[material].roughnessMm;
 
   const result = useMemo<Result | null>(() => {
-    const w = num(width) / 1000, h = num(height) / 1000;
-    const d = isBox ? 2 * w * h / (w + h) : num(diameter) / 1000;
+    const w = num(width) / 1000;
+    const h = isBox && isPartial ? num(soffitRl) - num(invertRl) : num(height) / 1000;
+    const pipeDiameter = num(diameter) / 1000;
+    const sectionHeight = isBox ? h : pipeDiameter;
+    let depth = sectionHeight;
+    if (isPartial) {
+      if ([invertRl, waterRl, ...(isBox ? [soffitRl] : [])].some((v) => v.trim() === "")) return null;
+      if (![num(invertRl), num(waterRl), ...(isBox ? [num(soffitRl)] : [])].every(Number.isFinite)) return null;
+      depth = num(waterRl) - num(invertRl);
+      if (!(depth > 0 && depth < sectionHeight)) return null;
+    }
+    let area = isBox ? w * depth : Math.PI * pipeDiameter * pipeDiameter / 4;
+    let wettedPerimeter = isBox ? (isPartial ? w + 2 * depth : 2 * (w + h)) : Math.PI * pipeDiameter;
+    if (!isBox && isPartial) {
+      const radius = pipeDiameter / 2;
+      const theta = 2 * Math.acos(1 - depth / radius);
+      area = radius * radius * (theta - Math.sin(theta)) / 2;
+      wettedPerimeter = radius * theta;
+    }
+    const d = 4 * area / wettedPerimeter;
     const l = num(length);
     const totalFlowM3s = num(flow) / 86.4; // total ML/d to m3/s
     const unitCount = num(units);
@@ -124,7 +150,6 @@ export function HeadlossTool() {
     const e = roughnessMm / 1000;
     if (![d, l, q, e, k].every(Number.isFinite) || d <= 0 || l < 0 || q <= 0 || e < 0 || k < 0 || (isBox && (!(w > 0) || !(h > 0)))) return null;
 
-    const area = isBox ? w * h : Math.PI * d * d / 4;
     const velocity = q / area;
     const reynolds = velocity * d / NU;
     const frictionFactor = colebrookFrictionFactor(reynolds, e / d);
@@ -134,17 +159,19 @@ export function HeadlossTool() {
     const totalLoss = frictionLoss + minorLoss;
     const hydraulicGradient = l > 0 ? frictionLoss / l : 0;
 
-    return { flowM3s: q, totalFlowM3s, units: unitCount, area, velocity, reynolds, frictionFactor, frictionLoss, minorLoss, totalLoss, hydraulicGradient };
-  }, [diameter, width, height, isBox, length, flow, units, lossK, roughnessMm]);
+    return { flowM3s: q, totalFlowM3s, units: unitCount, area, wettedPerimeter, hydraulicDiameter: d, depth, velocity, reynolds, frictionFactor, frictionLoss, minorLoss, totalLoss, hydraulicGradient };
+  }, [diameter, width, height, isBox, length, flow, units, lossK, roughnessMm, isPartial, invertRl, waterRl, soffitRl]);
 
-  const downstreamHgl = result && upstreamHgl.trim() !== "" ? num(upstreamHgl) - result.totalLoss : null;
+  const downstreamHgl = !isPartial && result && upstreamHgl.trim() !== "" ? num(upstreamHgl) - result.totalLoss : null;
 
   const exportCsv = () => {
     if (!result) return;
     const rows = [
       ["Pipe Headloss Calculation", "Value", "Unit"],
       ["Material", material, ""],
-      ...(isBox ? [["Internal width", width, "mm"], ["Internal height", height, "mm"]] : [["Internal diameter", diameter, "mm"]]),
+      ["Flow condition", isPartial ? "Partial flow at specified RLs" : "Full flow", ""],
+      ...(isPartial ? [["Internal invert RL", invertRl, "m"], ["Design water level RL", waterRl, "m"], ["Internal soffit RL", isBox ? soffitRl : num(invertRl) + num(diameter) / 1000, "m"]] : []),
+      ...(isBox ? [["Internal width", width, "mm"], ["Internal height", isPartial ? (num(soffitRl) - num(invertRl)) * 1000 : height, "mm"]] : [["Internal diameter", diameter, "mm"]]),
       ["Pipe length", length, "m"],
       ["Total design flow", flow, "ML/d"],
       ["Total design flow", result.totalFlowM3s, "m3/s"],
@@ -152,6 +179,9 @@ export function HeadlossTool() {
       ["Flow per unit", num(flow) / result.units, "ML/d"],
       ["Flow per unit", result.flowM3s, "m3/s"],
       ["Flow area per unit", result.area, "m2"],
+      ["Water depth", result.depth, "m"],
+      ["Wetted perimeter per unit", result.wettedPerimeter, "m"],
+      ["Hydraulic diameter", result.hydraulicDiameter, "m"],
       ["Absolute roughness", roughnessMm, "mm"],
       ["Minor loss coefficient K", lossK, ""],
       ["Velocity", result.velocity, "m/s"],
@@ -177,7 +207,7 @@ export function HeadlossTool() {
         <div>
           <p className="eyebrow">HYDRAULIC CALCULATOR</p>
           <h1>Pipe Headloss</h1>
-          <p className="subtitle">Colebrook–White friction and minor-loss calculation for full-flow pipes and culverts.</p>
+          <p className="subtitle">Colebrook–White friction and minor losses for full flow or a specified partial-flow depth.</p>
         </div>
       </div>
 
@@ -200,8 +230,16 @@ export function HeadlossTool() {
                 if (isBox) { const [w, h] = selected.split(" x "); setWidth(w); setHeight(h); }
                 else { const row = pipeSizes.find((p) => String(p.nominal) === selected); const id = row?.[material.toLowerCase() as "hdpe" | "rcp" | "pvc"]; if (id) setDiameter(String(id)); }
               }}><option value="custom">Custom dimensions</option>{isBox ? BOX_SIZES.map((box) => <option key={box} value={box}>{box.replace(" x ", " × ")} mm</option>) : pipeSizes.map((p) => <option key={p.nominal} value={p.nominal}>DN{p.nominal}</option>)}</select></label>
-              {isBox ? <><Field label="Internal width" value={width} unit="mm" onChange={(v) => { setWidth(v); setSize("custom"); }} /><Field label="Internal height" value={height} unit="mm" onChange={(v) => { setHeight(v); setSize("custom"); }} /></> : <Field label="Internal diameter" value={diameter} unit="mm" onChange={(v) => { setDiameter(v); setSize("custom"); }} />}
-              <p className="answer-note">Full-flow closed conduits only. Boxes use hydraulic diameter 4A/P. Box presets are nominal internal sizes from the existing culvert workbook list; confirm actual manufacturer dimensions. Circular pipe IDs match Pipeline HGL.</p>
+              {isBox ? <><Field label="Internal width" value={width} unit="mm" onChange={(v) => { setWidth(v); setSize("custom"); }} />{!isPartial && <Field label="Internal height" value={height} unit="mm" onChange={(v) => { setHeight(v); setSize("custom"); }} />}</> : <Field label="Internal diameter" value={diameter} unit="mm" onChange={(v) => { setDiameter(v); setSize("custom"); }} />}
+              <p className="answer-note">Uses hydraulic diameter 4A/P and actual wetted area. Rectangular boxes exclude corner haunches; verify that the water level is below any top haunches in partial-flow mode. Box presets are nominal internal sizes from the existing culvert workbook list; confirm actual manufacturer dimensions. Circular pipe IDs match Pipeline HGL.</p>
+              <label className="calc-field"><span>Flow condition</span><select value={flowCondition} onChange={(e) => setFlowCondition(e.target.value)}><option value="full">Full flow</option><option value="partial">Partially full - known design RLs</option></select></label>
+              {isPartial && <>
+                <Field label="Internal invert RL" value={invertRl} unit="m" hint="Top of the internal floor/base slab; use the same datum for all RLs" onChange={setInvertRl} />
+                {isBox && <Field label="Internal soffit RL" value={soffitRl} unit="m" hint="Underside of the roof, not the outside top" onChange={setSoffitRl} />}
+                <Field label="Design water level RL" value={waterRl} unit="m" hint="Known water level at the representative calculation section" onChange={setWaterRl} />
+                <p className="answer-note">Depth = water level RL minus internal invert RL. For boxes, internal height comes from soffit RL minus invert RL. For circular pipes, crown RL = invert RL plus internal diameter. Enter a water level strictly between invert and soffit/crown, or select full flow.</p>
+              </>}
+              {!result && <p className="answer-note" role="status">Enter valid dimensions, positive total flow and a whole number of units. Partial flow also requires valid RLs with water above the invert and below the soffit/crown.</p>}
               <Field label="Pipe length" value={length} unit="m" onChange={setLength} />
               <label className="calc-field"><span>Number of parallel units</span><small>Identical barrels or cells sharing the total flow equally</small><input type="number" min="1" step="1" value={units} onChange={(e) => setUnits(e.target.value)} /></label>
               <Field label="Total design flow" value={flow} unit="ML/d" hint={result ? `${fmt(result.totalFlowM3s, 4)} m³/s total; ${fmt(num(flow) / result.units, 3)} ML/d per unit` : undefined} onChange={setFlow} />
@@ -217,16 +255,16 @@ export function HeadlossTool() {
             <p className="answer-note">Use the combined K for one flow path, including entrance, exit, bends, valves or other fittings. K remains editable and is not multiplied by the number of parallel units.</p>
           </section>
 
-          <section className="calc-card">
+          {!isPartial && <section className="calc-card">
             <div className="calc-card-title"><b>3</b><h2>Hydraulic grade line (optional)</h2></div>
             <div className="calc-fields">
               <Field label="Upstream HGL / water level" value={upstreamHgl} unit="m AHD" onChange={setUpstreamHgl} />
             </div>
-          </section>
+          </section>}
         </div>
 
         <aside className="results-card">
-          <p className="eyebrow">TOTAL HEADLOSS</p>
+          <p className="eyebrow">{isPartial ? "ESTIMATED LOSSES AT SPECIFIED DEPTH" : "TOTAL HEADLOSS"}</p>
           <div className="result-main"><strong>{result ? fmt(result.totalLoss) : "—"}</strong><span>m</span></div>
           {result && <>
             <div className="check-row">
@@ -239,11 +277,15 @@ export function HeadlossTool() {
             <Metric name="Number of parallel units" value={String(result.units)} />
             <Metric name="Flow per unit" value={`${fmt(num(flow) / result.units)} ML/d`} />
             <Metric name="Flow area per unit" value={`${fmt(result.area, 4)} m²`} />
+            <Metric name="Water depth" value={`${fmt(result.depth)} m`} />
+            <Metric name="Wetted perimeter per unit" value={`${fmt(result.wettedPerimeter)} m`} />
+            <Metric name="Hydraulic diameter" value={`${fmt(result.hydraulicDiameter)} m`} />
+            {isPartial && <p className="answer-note">Estimate at the specified section and depth, assumed representative over the reach. This does not solve normal depth, backwater, inlet control or the water-surface profile; bed slope and boundary conditions are needed for those checks. Minor-loss K must suit the actual flow conditions.</p>}
             <Metric name="Reynolds number" value={fmt(result.reynolds, 0)} />
             <Metric name="Absolute roughness" value={`${fmt(roughnessMm, 3)} mm`} />
             <Metric name="Darcy friction factor" value={fmt(result.frictionFactor, 5)} />
-            <Metric name="Friction loss, hf" value={`${fmt(result.frictionLoss)} m`} />
-            <Metric name="Minor losses, hs" value={`${fmt(result.minorLoss)} m`} />
+            <Metric name="Friction loss, hf" value={`${fmt(result.frictionLoss * 1000, 3)} mm`} />
+            <Metric name="Minor losses, hs" value={`${fmt(result.minorLoss * 1000, 3)} mm`} />
             <Metric name="Hydraulic gradient" value={`${fmt(result.hydraulicGradient, 5)} m/m`} />
             {downstreamHgl !== null && Number.isFinite(downstreamHgl) && <Metric name="Downstream HGL" value={`${fmt(downstreamHgl)} m AHD`} />}
             <p className="answer-note">Headloss applies across the parallel units and is not added between barrels. Equal flow sharing assumes identical dimensions, lengths and loss coefficients. Colebrook–White calculation uses water kinematic viscosity 1.01×10⁻⁶ m²/s, consistent with the source spreadsheet at approximately 20°C.</p>
