@@ -58,6 +58,7 @@ async function exportWorkbook(c: Checklist, state: ChecklistState) {
 }
 
 function printHtml(c: Checklist, state: ChecklistState) {
+  const projectHeader=typeof document==="undefined"?"":Array.from(document.querySelectorAll<HTMLInputElement>(".project-details input")).filter(input=>input.value.trim()).map(input=>`<p style="margin:3px 0;overflow-wrap:anywhere"><strong>${escapeHtml(input.dataset.reportLabel||"")}:</strong> ${escapeHtml(input.value.trim())}</p>`).join("");
   const h = (k: string) => escapeHtml(state.header[k] ?? "");
   const header = HEADER_FIELDS.map(([k, l]) => `<div><b>${escapeHtml(l)}:</b> ${h(k)}</div>`).join("");
   const body = c.sections.map(s => `<tr class="sec"><td>${s.no}</td><td colspan="7">${escapeHtml(s.title)}</td></tr>` + s.rows.map(r => {
@@ -65,7 +66,7 @@ function printHtml(c: Checklist, state: ChecklistState) {
     const it = state.items[r.id] ?? blankItem();
     return `<tr><td>${r.no}</td><td>${escapeHtml(r.item)}</td><td>${escapeHtml(r.procedure)}</td><td>${it.answer}</td><td>${it.checked ? "✓" : ""}</td><td>${escapeHtml(it.designer)}</td><td>${escapeHtml(it.reviewer)}</td><td>${it.status}</td></tr>`;
   }).join("")).join("");
-  return `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(c.title)}</title><style>body{font:11px/1.4 Arial,sans-serif;color:#1d3446;margin:18px}h1{font-size:18px;margin:0 0 10px}.hdr{display:grid;grid-template-columns:1fr 1fr;gap:4px 24px;margin-bottom:14px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #9fb3c2;padding:4px 6px;vertical-align:top;text-align:left}th{background:#24466a;color:#fff}tr.sec td{background:#dce8f0;font-weight:bold}tr.sub td{font-weight:bold;font-style:italic}@page{size:A4 landscape;margin:12mm}@media print{button{display:none}}</style></head><body><button onclick="print()">Print / Save as PDF</button><h1>${escapeHtml(c.title)}</h1><div class="hdr">${header}</div><table><thead><tr><th>No.</th><th>Item</th><th>Procedure</th><th>Yes/No/N/A</th><th>Checked</th><th>Designer comments</th><th>Reviewer comments</th><th>Status</th></tr></thead><tbody>${body}</tbody></table></body></html>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(c.title)}</title><style>body{font:11px/1.4 Arial,sans-serif;color:#1d3446;margin:18px}h1{font-size:18px;margin:0 0 10px}.hdr{display:grid;grid-template-columns:1fr 1fr;gap:4px 24px;margin-bottom:14px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #9fb3c2;padding:4px 6px;vertical-align:top;text-align:left}th{background:#24466a;color:#fff}tr.sec td{background:#dce8f0;font-weight:bold}tr.sub td{font-weight:bold;font-style:italic}@page{size:A4 landscape;margin:12mm}@media print{button{display:none}}</style></head><body><button onclick="print()">Print / Save as PDF</button><h1>${escapeHtml(c.title)}</h1>${projectHeader}<div class="hdr">${header}</div><table><thead><tr><th>No.</th><th>Item</th><th>Procedure</th><th>Yes/No/N/A</th><th>Checked</th><th>Designer comments</th><th>Reviewer comments</th><th>Status</th></tr></thead><tbody>${body}</tbody></table></body></html>`;
 }
 
 function Metric({ label, value }: { label: string; value: string }) {

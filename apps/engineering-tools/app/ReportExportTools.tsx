@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 const esc=(s:string)=>s.replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]||c));
 const PAGE_URL=()=>window.location.href.split("#")[0];
@@ -9,10 +10,11 @@ const STRUCTURAL_TITLES=new Set(["Headwall Concrete","Base Slab Concrete"]);
 function reportData(){
   const title=document.querySelector("h1")?.textContent?.trim()||"Engineering Calculation";
   const subtitle=document.querySelector(".subtitle")?.textContent?.trim()||"";
-  const fields=[...document.querySelectorAll("label")].map(el=>{const input=el.querySelector("input,select") as HTMLInputElement|HTMLSelectElement|null;if(!input)return null;const label=(el.querySelector("span")?.textContent||el.childNodes[0]?.textContent||"").trim();return label?[label,input.value]:null}).filter(Boolean) as string[][];
+  const fields=[...document.querySelectorAll("label:not(.project-details label)")].map(el=>{const input=el.querySelector("input,select") as HTMLInputElement|HTMLSelectElement|null;if(!input)return null;const label=(el.querySelector("span")?.textContent||el.childNodes[0]?.textContent||"").trim();return label?[label,input.value]:null}).filter(Boolean) as string[][];
   const metrics=[...document.querySelectorAll(".metric,.model-strip>div")].map(el=>[(el.querySelector("span")?.textContent||"").trim(),(el.querySelector("strong")?.textContent||"").trim()]).filter(x=>x[0]);
   const card=document.querySelector(".results-card");
-  return {title,subtitle,fields,metrics,resultHeading:card?.querySelector(".eyebrow")?.textContent?.trim()||"",resultMain:card?.querySelector(".result-main")?.textContent?.trim().replace(/\s+/g," ")||"",tables:[...document.querySelectorAll("table")],svgs:[...document.querySelectorAll("svg")].filter(svg=>!svg.closest(".sidebar")&&!svg.closest("button")) as SVGElement[],url:PAGE_URL()};
+  const projectDetails=[...document.querySelectorAll<HTMLInputElement>(".project-details input")].filter(input=>input.value.trim()).map(input=>[input.dataset.reportLabel||"",input.value.trim()]);
+  return {title,subtitle,fields,projectDetails,metrics,resultHeading:card?.querySelector(".eyebrow")?.textContent?.trim()||"",resultMain:card?.querySelector(".result-main")?.textContent?.trim().replace(/\s+/g," ")||"",tables:[...document.querySelectorAll("table")],svgs:[...document.querySelectorAll("svg")].filter(svg=>!svg.closest(".sidebar")&&!svg.closest("button")) as SVGElement[],url:PAGE_URL()};
 }
 
 function reportHtml(){
@@ -37,7 +39,7 @@ function reportHtml(){
     return clone.outerHTML;
   }).join("");
   const visuals=d.svgs.map(svg=>`<div class="visual">${svg.outerHTML}</div>`).join("");
-  return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(d.title)}</title><style>@page{size:A4;margin:18mm 14mm 18mm}*{box-sizing:border-box}body{font:10.5px Arial;color:#24364d;margin:0}header{display:flex;align-items:center;gap:12px;border-bottom:3px solid #365b91;padding-bottom:10px;margin-bottom:16px}.logo{width:46px;height:46px}.headtext{flex:1}h1{font-size:22px;margin:0;color:#263d5e}h2{font-size:13px;color:#365b91;margin:18px 0 7px}.sub,.url,.date{color:#718096}.url{font-size:9px;margin-top:4px}.date{text-align:right;white-space:nowrap}.recommend{border:2px solid #365b91;background:#eef4fb;padding:10px 12px;margin:10px 0 16px}.recommend small{display:block;letter-spacing:1px;color:#365b91;font-weight:bold}.recommend strong{display:block;font-size:20px;color:#17375e;margin-top:4px}table{width:100%;border-collapse:collapse;margin:7px 0 15px;font-size:9.5px;page-break-inside:auto}thead{display:table-header-group}tr{page-break-inside:avoid}th{background:#dbe8f5;color:#263d5e;text-align:left;font-weight:700}th,td{border:1px solid #9aa9ba;padding:5px 6px}tr:nth-child(even) td{background:#f7f9fb}.visual{border:1px solid #ccd6e2;border-radius:6px;padding:10px;margin:8px 0 14px;page-break-inside:avoid;text-align:center}.visual svg{max-width:100%;height:auto;max-height:310px}.note{margin-top:18px;padding:9px;background:#eef7f2;border-left:3px solid #28755a;color:#365b50}footer{margin-top:16px;padding-top:7px;border-top:1px solid #ccd6e2;font-size:8.5px;color:#718096}</style></head><body><header><img class="logo" src="${location.origin}/brand-mark.svg"/><div class="headtext"><h1>${esc(d.title)}</h1><div class="sub">${esc(d.subtitle)}</div><div class="url">${esc(d.url)}</div></div><div class="date">${new Date().toLocaleDateString("en-AU")}</div></header>${d.resultHeading&&d.resultMain?`<div class="recommend"><small>${esc(d.resultHeading)}</small><strong>${esc(d.resultMain)}</strong></div>`:""}${d.fields.length?`<h2>Design inputs</h2><table>${rows(d.fields)}</table>`:""}${d.metrics.length?`<h2>Results summary</h2><table>${rows(d.metrics)}</table>`:""}${visuals?`<h2>Design schematic</h2>${visuals}`:""}${tables?`<h2>Calculation tables</h2>${tables}`:""}<div class="note">Engineering Tools calculation report. Verify inputs, assumptions, governing standards and site-specific design requirements before issue.</div><footer>${esc(d.url)}</footer></body></html>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(d.title)}</title><style>@page{size:A4;margin:18mm 14mm 18mm}*{box-sizing:border-box}body{font:10.5px Arial;color:#24364d;margin:0}header{display:flex;align-items:center;gap:12px;border-bottom:3px solid #365b91;padding-bottom:10px;margin-bottom:16px}.project-header{break-inside:avoid;overflow-wrap:anywhere}.logo{width:46px;height:46px}.headtext{flex:1}h1{font-size:22px;margin:0;color:#263d5e}h2{font-size:13px;color:#365b91;margin:18px 0 7px}.sub,.url,.date{color:#718096}.url{font-size:9px;margin-top:4px}.date{text-align:right;white-space:nowrap}.recommend{border:2px solid #365b91;background:#eef4fb;padding:10px 12px;margin:10px 0 16px}.recommend small{display:block;letter-spacing:1px;color:#365b91;font-weight:bold}.recommend strong{display:block;font-size:20px;color:#17375e;margin-top:4px}table{width:100%;border-collapse:collapse;margin:7px 0 15px;font-size:9.5px;page-break-inside:auto}thead{display:table-header-group}tr{page-break-inside:avoid}th{background:#dbe8f5;color:#263d5e;text-align:left;font-weight:700}th,td{border:1px solid #9aa9ba;padding:5px 6px}tr:nth-child(even) td{background:#f7f9fb}.visual{border:1px solid #ccd6e2;border-radius:6px;padding:10px;margin:8px 0 14px;page-break-inside:avoid;text-align:center}.visual svg{max-width:100%;height:auto;max-height:310px}.note{margin-top:18px;padding:9px;background:#eef7f2;border-left:3px solid #28755a;color:#365b50}footer{margin-top:16px;padding-top:7px;border-top:1px solid #ccd6e2;font-size:8.5px;color:#718096}</style></head><body><header><img class="logo" src="${location.origin}/brand-mark.svg"/><div class="headtext"><h1>${esc(d.title)}</h1><div class="sub">${esc(d.subtitle)}</div><div class="url">${esc(d.url)}</div></div><div class="date">${new Date().toLocaleDateString("en-AU")}</div></header>${d.projectDetails.length?`<section class="project-header"><table>${rows(d.projectDetails)}</table></section>`:""}${d.resultHeading&&d.resultMain?`<div class="recommend"><small>${esc(d.resultHeading)}</small><strong>${esc(d.resultMain)}</strong></div>`:""}${d.fields.length?`<h2>Design inputs</h2><table>${rows(d.fields)}</table>`:""}${d.metrics.length?`<h2>Results summary</h2><table>${rows(d.metrics)}</table>`:""}${visuals?`<h2>Design schematic</h2>${visuals}`:""}${tables?`<h2>Calculation tables</h2>${tables}`:""}<div class="note">Engineering Tools calculation report. Verify inputs, assumptions, governing standards and site-specific design requirements before issue.</div><footer>${esc(d.url)}</footer></body></html>`;
 }
 
 function exportPdf(){const w=window.open("","_blank","width=900,height=1100");if(!w)return;w.document.write(reportHtml());w.document.close();try{w.history.replaceState({},"",PAGE_URL())}catch{}w.focus();setTimeout(()=>w.print(),500)}
@@ -47,6 +49,7 @@ async function exportExcel(){
   ws.columns=[{width:34},{width:24},{width:24},{width:24},{width:24},{width:24},{width:24},{width:24}];
   const addTitle=(s:string)=>{const r=ws.addRow([s]);r.font={bold:true,size:12,color:{argb:"FF365B91"}};ws.mergeCells(r.number,1,r.number,8)};
   ws.addRow(["ENGINEERING TOOLS",d.title]);ws.getRow(1).font={bold:true,size:16,color:{argb:"FF17375E"}};ws.mergeCells(1,2,1,8);ws.addRow(["Web page",d.url]);ws.addRow(["Date",new Date().toLocaleDateString("en-AU")]);ws.addRow([]);
+  d.projectDetails.forEach(x=>ws.addRow(x));
   if(d.resultHeading&&d.resultMain){addTitle(d.resultHeading);ws.addRow([d.resultMain]);ws.addRow([])}
   if(d.fields.length){addTitle("Design inputs");d.fields.forEach(x=>ws.addRow(x));ws.addRow([])}
   if(d.metrics.length){addTitle("Results summary");d.metrics.forEach(x=>ws.addRow(x));ws.addRow([])}
@@ -57,8 +60,23 @@ async function exportExcel(){
 }
 
 export default function ReportExportTools(){
+  const [project,setProject]=useState({name:"",number:"",designer:""});
+  const [target,setTarget]=useState<HTMLElement|null>(null);
+  useEffect(()=>{
+    try{const saved=JSON.parse(sessionStorage.getItem("engineering-project-details")||"null");if(saved&&["name","number","designer"].every(k=>typeof saved[k]==="string"))setProject(saved)}catch{}
+    const place=()=>{
+      const heading=document.querySelector("h1");
+      if(!heading){setTarget(null);return}
+      let host=document.querySelector<HTMLElement>("#project-details-host");
+      if(!host){host=document.createElement("div");host.id="project-details-host"}
+      const anchor=heading.closest(".title-row")||heading;
+      if(host.nextElementSibling!==anchor)anchor.before(host);
+      setTarget(host);
+    };
+    place();const observer=new MutationObserver(place);observer.observe(document.body,{childList:true,subtree:true});return()=>{observer.disconnect();document.querySelector("#project-details-host")?.remove()};
+  },[]);
+  const updateProject=(key:keyof typeof project,value:string)=>{const next={...project,[key]:value};setProject(next);try{sessionStorage.setItem("engineering-project-details",JSON.stringify(next))}catch{}};
   const [mode,setMode]=useState<"none"|"pdf"|"both">("none");
   useEffect(()=>{const check=()=>{const title=document.querySelector("h1")?.textContent?.trim()||"";const structural=STRUCTURAL_TITLES.has(title);const csv=[...document.querySelectorAll("button")].filter(b=>/export.*csv/i.test(b.textContent||"")) as HTMLElement[];csv.forEach(b=>{if(!b.hasAttribute("data-keep-csv"))b.style.display="none"});setMode(structural?"pdf":csv.length?"both":"none")};check();const o=new MutationObserver(check);o.observe(document.body,{subtree:true,childList:true});return()=>o.disconnect()},[]);
-  if(mode==="none")return null;
-  return <div className="report-export-tools"><button onClick={exportPdf}>↓ Export PDF</button>{mode==="both"&&<button onClick={exportExcel}>↓ Export Excel</button>}</div>;
+  return <>{target&&createPortal(<section className="project-details" aria-label="Optional project details"><div className="project-details-title">Project details <small>Optional</small></div><div className="project-details-fields">{([{key:"name",label:"Project name"},{key:"number",label:"Project number"},{key:"designer",label:"Designer"}] as const).map(field=><label key={field.key} htmlFor={`report-project-${field.key}`}><span>{field.label}</span><input id={`report-project-${field.key}`} data-report-label={field.label} type="text" value={project[field.key]} onChange={event=>updateProject(field.key,event.target.value)}/></label>)}</div></section>,target)}{mode!=="none"&&<div className="report-export-tools"><button onClick={exportPdf}>↓ Export PDF</button>{mode==="both"&&<button onClick={exportExcel}>↓ Export Excel</button>}</div>}</>;
 }
