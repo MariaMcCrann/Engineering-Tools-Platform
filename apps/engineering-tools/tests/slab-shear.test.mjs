@@ -35,15 +35,33 @@ test('weaker primary tension face governs the shear envelope',()=>{
  assert.ok(r.capacity<run().capacity);
 });
 
-test('secondary bars update secondary steel checks without being added to primary steel',()=>{
- function secondary(spacing){
-  stateValues=[16,spacing,16,spacing];stateIndex=0;
-  const tree=exports.AdditionalSlabReinforcement({length:10000,width:9000,cover:50,topMesh:'RL1218',bottomMesh:'RL1218',D:400,fc:40,fsy:500,Mp:50,Mn:-10,V:70,primaryBottom:section,primaryTop:section});
-  let checks=[];function visit(n){if(Array.isArray(n))n.forEach(visit);else if(n&&typeof n==='object'){if(n.props?.checks)checks.push(...n.props.checks);visit(n.props?.children)}}visit(tree);
-  return checks.filter(c=>c.label.includes('secondary temperature'));
- }
- const sparse=secondary(1000),dense=secondary(200);
- assert.equal(sparse.length,2);assert.equal(sparse[0].pass,false);assert.equal(dense[0].pass,true);
- assert.ok(dense[0].provided>sparse[0].provided);
+function additional(states){
+ stateValues=states;stateIndex=0;
+ return exports.AdditionalSlabReinforcement({length:10000,width:9000,cover:50,topMesh:'RL1218',bottomMesh:'RL1218',D:400,fc:40,fsy:500,Mp:50,Mn:-10,V:70,primaryBottom:section,primaryTop:section});
+}
+function inspect(tree){const checks=[],controls=[];function visit(n){if(Array.isArray(n))n.forEach(visit);else if(n&&typeof n==='object'){if(n.props?.checks)checks.push(...n.props.checks);if(n.type==='input'||n.type==='select')controls.push(n);visit(n.props?.children)}}visit(tree);return {checks,controls};}
+test('optional reinforcement defaults off and hides its inputs, checks and quantities',()=>{
+ const r=inspect(additional([]));assert.equal(r.controls.length,2);assert.ok(r.controls.every(c=>c.props.type==='checkbox'&&!c.props.checked));
+ assert.ok(!r.checks.some(c=>c.label.includes('secondary')||c.label.includes('Minimum transverse')));
+ assert.ok(r.checks.some(c=>c.label.startsWith('One-way shear')));
+});
+test('secondary steel sums both faces and reacts to optional bars',()=>{
+ const sparse=inspect(additional([16,1000,16,1000,0,400,90,2,0,true,false])).checks.find(c=>c.label.startsWith('Total secondary'));
+ const dense=inspect(additional([16,200,16,200,0,400,90,2,0,true,false])).checks.find(c=>c.label.startsWith('Total secondary'));
+ assert.ok(Math.abs(sparse.provided-2*(Math.PI*16**2/4+Math.PI*7.6**2/4*5))<1e-8);
+ assert.equal(sparse.pass,true);assert.ok(dense.provided>sparse.provided);
  assert.equal(section.Ast,1500.8435303749638);
+});
+test('unchecking shear ignores retained link selections and invalid leg input',()=>{
+ const selected=[0,1000,0,1000,16,100,90,2,0,false,true];
+ const on=inspect(additional(selected)),off=inspect(additional([...selected.slice(0,10),false]));
+ assert.ok(on.controls.length>off.controls.length);
+ assert.ok(on.checks.find(c=>c.label.startsWith('One-way shear')).provided>off.checks.find(c=>c.label.startsWith('One-way shear')).provided);
+ const invalidOff=inspect(additional([0,1000,0,1000,0,400,90,0,0,false,false]));
+ assert.ok(invalidOff.checks.find(c=>c.label.startsWith('One-way shear')).provided>0);
+});
+test('reported 300 mm slab shear discrepancy is reproduced rather than hidden',()=>{
+ const mesh=Math.PI*11.9**2/4*10,bar=Math.PI*16**2/4;
+ const r=calc(300,40,500,84.797,-103.641,219.993,{d:244.05,Ast:mesh+bar*5},{d:244.05,Ast:mesh+bar*2.5},0,400,90,2);
+ assert.ok(Math.abs(r.capacity-159.1)<.1);assert.equal(r.checks[0].pass,false);
 });

@@ -10,7 +10,7 @@ const STRUCTURAL_TITLES=new Set(["Headwall Concrete","Base Slab Concrete"]);
 function reportData(){
   const title=document.querySelector("h1")?.textContent?.trim()||"Engineering Calculation";
   const subtitle=document.querySelector(".subtitle")?.textContent?.trim()||"";
-  const fields=[...document.querySelectorAll("label:not(.project-details label)")].map(el=>{const input=el.querySelector("input,select") as HTMLInputElement|HTMLSelectElement|null;if(!input)return null;const label=(el.querySelector("span")?.textContent||el.childNodes[0]?.textContent||"").trim();return label?[label,input.value]:null}).filter(Boolean) as string[][];
+  const fields=[...document.querySelectorAll("label:not(.project-details label)")].map(el=>{const input=el.querySelector("input,select") as HTMLInputElement|HTMLSelectElement|null;if(!input)return null;const label=(el.querySelector("span")?.textContent||el.childNodes[0]?.textContent||"").trim();return label?[label,input instanceof HTMLInputElement&&input.type==="checkbox"?(input.checked?"Yes":"No"):input.value]:null}).filter(Boolean) as string[][];
   const metrics=[...document.querySelectorAll(".metric,.model-strip>div")].map(el=>[(el.querySelector("span")?.textContent||"").trim(),(el.querySelector("strong")?.textContent||"").trim()]).filter(x=>x[0]);
   const card=document.querySelector(".results-card");
   const projectDetails=[...document.querySelectorAll<HTMLInputElement>(".project-details input")].filter(input=>input.value.trim()).map(input=>[input.dataset.reportLabel||"",input.value.trim()]);
