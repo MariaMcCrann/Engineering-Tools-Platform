@@ -13,8 +13,8 @@ const near=(a,b)=>assert.ok(Math.abs(a-b)<1e-8,`${a} != ${b}`);
 test('confirmed Church Street support condition is never replaced by a cantilever',()=>{
  const r=calc(5.5,2.43,2.43,2.43,20,9.1,20,'case4');assert.equal(r.method,'unavailable');assert.equal(r.valid,false);assert.match(r.reason,/Base \+ one side restraint retained/);assert.equal(r.vMn,0);
 });
-test('stored square plate coefficients reproduce workbook envelopes for matching square geometry',()=>{
- const r=calc(2.43,2.43,2.43,2.43,20,9.1,20,'case4');assert.equal(r.valid,true);near(r.hMp,51.02816411556);near(r.hMn,-5.66360925228);near(r.hV,70.560540099);near(r.vMp,68.335743994425);near(r.vMn,-9.76236686046);near(r.vV,121.715102142);
+test('square plate uses the published EM27 full-height triangular coefficients',()=>{
+ const r=calc(2.43,2.43,2.43,2.43,20,9.1,20,'case4');assert.equal(r.valid,true);near(r.hMp,48.64811091147);near(r.hMn,-5.433954995745);near(r.hV,73.9542337515);near(r.vMp,58.982552455545);near(r.vMn,-6.75598386582);near(r.vV,105.476922387);
 });
 test('base-only cantilever is explicitly selected and has no invented horizontal plate demand',()=>{
  const r=calc(1,2.43,2.43,2.43,20,9.1,20,'cantilever');assert.equal(r.valid,true);assert.equal(r.method,'cantilever');near(r.vMn,-93.845099475);near(r.vV,91.5581475);near(r.hMp,0);near(r.hV,0);
@@ -46,4 +46,17 @@ test('rendered headwall retains face options and force fields without blanking s
  assert.ok(minimum.includes('483.5'));assert.ok(minimum.includes('PASS'));
  for(const row of rows.filter(row=>row.includes('One-way shear')||row.includes('+ve bending'))){assert.ok(row.includes('NOT ASSESSED'));assert.ok(!row.includes('PASS'));}
  assert.ok(!html.includes('351.2 kN/m'));
+});
+
+test('unit pressure benchmarks separate uniform Figure 27 from triangular Figure 30',()=>{
+ // Isolate each pressure shape. Figure 30: a/b=1, p=1, b=1.
+ const triangle=calc(1,1,1,0,2,1,0,'case4');
+ for(const [key,expected] of Object.entries({hMp:.0662,hMn:-.0077,hV:.2481,vMp:.1157,vMn:-.0172,vV:.5586}))near(triangle[key],expected);
+ // With no retained soil or water, this is a pure uniform-pressure benchmark.
+ const uniform=calc(1,1,0,0,1,1,1,'case4');
+ for(const [key,expected] of Object.entries({hMp:.2949,hMn:-.0324,hV:1.1828,vMp:.2949,vMn:-.0324,vV:1.1828}))near(uniform[key],expected);
+});
+
+test('dry plate does not subtract buoyancy where there is no groundwater',()=>{
+ const dry=calc(2,2,2,0,20,9.81,0,'case4');near(dry.deadPressure,20);near(dry.hMp,.0662*20*4);near(dry.vMp,.1157*20*4);
 });
