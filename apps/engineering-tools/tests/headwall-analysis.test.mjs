@@ -3,7 +3,10 @@ import test from 'node:test';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import ts from 'typescript';
-function load(path,extra=''){const exports={};vm.runInNewContext(ts.transpileModule(fs.readFileSync(new URL(path,import.meta.url),'utf8')+extra,{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports,require:()=>({})});return exports;}
+import React from 'react';
+import * as jsxRuntime from 'react/jsx-runtime';
+import {renderToStaticMarkup} from 'react-dom/server';
+function load(path,extra='',resolver=()=>({})){const exports={};vm.runInNewContext(ts.transpileModule(fs.readFileSync(new URL(path,import.meta.url),'utf8')+extra,{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports,require:resolver});return exports;}
 const {calculateHeadwallActions:calc,verifiedHeadwallActions:manual}=load('../app/StructuralLoadGenerators.tsx');
 const {sectionChecks:section,headwallCrackLimit:limit}=load('../app/StructuralConcreteTools.tsx','\nexport {sectionChecks,headwallCrackLimit};');
 const near=(a,b)=>assert.ok(Math.abs(a-b)<1e-8,`${a} != ${b}`);
@@ -32,4 +35,15 @@ test('mesh directions, signed service moments and cracking limits follow workboo
  const h=section(250,50,20,300,'RL1218','pri',40,500,50,35,1.75),v=section(250,50,20,300,'RL1218','sec',40,500,50,-35,1.75);
  assert.ok(h.Ast>v.Ast);assert.ok(v.fscr>0);assert.ok(v.fscr>h.fscr);
  near(limit(250,20,300,'SL81','pri',500),200);near(section(250,50,20,300,'SL81','pri',40,500,51,51.02816411556,1.75).fscr,189.89574077226513);
+});
+
+test('rendered headwall retains face options and force fields without blanking steel-only checks',()=>{
+ function component(path){return load(path,'',name=>name==='react'?React:name==='react/jsx-runtime'?jsxRuntime:name==='./StructuralLoadGenerators'?component('../app/StructuralLoadGenerators.tsx'):{});}
+ const html=renderToStaticMarkup(React.createElement(component('../app/StructuralConcreteTools.tsx').HeadwallStructuralTool));
+ for(const label of ['Inside face reinforcement','Outside face reinforcement','Inside face N-bar','Outside face N-bar','Inside face mesh wire spacing','Outside face mesh wire spacing','Design actions','Analysis required'])assert.ok(html.includes(label),label);
+ const rows=html.match(/<tr[\s\S]*?<\/tr>/g)||[];
+ const minimum=rows.find(row=>row.includes('Horizontal inside face minimum bending steel'));
+ assert.ok(minimum.includes('483.5'));assert.ok(minimum.includes('PASS'));
+ for(const row of rows.filter(row=>row.includes('One-way shear')||row.includes('+ve bending'))){assert.ok(row.includes('NOT ASSESSED'));assert.ok(!row.includes('PASS'));}
+ assert.ok(!html.includes('351.2 kN/m'));
 });
