@@ -24,7 +24,7 @@ test('link grid normalises effective legs across a one-metre strip and increases
  assert.equal(r.checks[0].pass,true);
 });
 test('wide spacing and invalid shear geometry cannot produce an overall PASS',()=>{
- assert.equal(run(16,400).checks[0].pass,false);
+ assert.equal(run(16,400).checks.every(c=>c.pass),false);
  for(const args of [[16,0],[16,100,0],[16,100,90,1.5]]){
   const r=run(...args);assert.equal(r.checks[0].pass,false);assert.equal(r.capacity,0);
  }
@@ -64,4 +64,18 @@ test('reported 300 mm slab shear discrepancy is reproduced rather than hidden',(
  const mesh=Math.PI*11.9**2/4*10,bar=Math.PI*16**2/4;
  const r=calc(300,40,500,84.797,-103.641,219.993,{d:244.05,Ast:mesh+bar*5},{d:244.05,Ast:mesh+bar*2.5},0,400,90,2);
  assert.ok(Math.abs(r.capacity-159.1)<.1);assert.equal(r.checks[0].pass,false);
+});
+
+test('350 mm slab distinguishes adequate shear strength from excessive 200 mm link spacing',()=>{
+ const r=calc(350,40,500,50,-60,186.6,{d:294,Ast:1600},{d:294,Ast:1600},16,200,90,2);
+ assert.ok(r.capacity>186.6);assert.equal(r.checks[0].pass,true);assert.equal(r.checks.every(c=>c.pass),false);
+ const spacing=r.checks.find(c=>c.label.includes('along primary span'));
+ assert.equal(spacing.required,200);assert.equal(spacing.provided,175);assert.equal(spacing.pass,false);
+ assert.equal(spacing.requiredLabel,'Actual spacing');assert.equal(spacing.providedLabel,'Maximum spacing');
+ assert.match(spacing.basis,/0.5 × slab thickness/);assert.match(spacing.basis,/175.0 mm/);
+});
+test('minimum shear steel remains a failed check even when links are not selected',()=>{
+ const r=calc(800,40,500,0,0,1,{d:740,Ast:2000},{d:740,Ast:2000},0,200,90,2);
+ assert.equal(r.checks[0].pass,true);assert.equal(r.checks.find(c=>c.label.startsWith('Minimum transverse')).pass,false);
+ assert.equal(r.checks.every(c=>c.pass),false);
 });
