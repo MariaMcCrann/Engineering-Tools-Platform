@@ -10,8 +10,11 @@ function load(path,extra='',resolver=()=>({})){const exports={};vm.runInNewConte
 const {calculateHeadwallActions:calc,verifiedHeadwallActions:manual}=load('../app/StructuralLoadGenerators.tsx');
 const {sectionChecks:section,headwallCrackLimit:limit}=load('../app/StructuralConcreteTools.tsx','\nexport {sectionChecks,headwallCrackLimit};');
 const near=(a,b)=>assert.ok(Math.abs(a-b)<1e-8,`${a} != ${b}`);
-test('confirmed Church Street support condition is never replaced by a cantilever',()=>{
- const r=calc(5.5,2.43,2.43,2.43,20,9.1,20,'case4');assert.equal(r.method,'unavailable');assert.equal(r.valid,false);assert.match(r.reason,/Base \+ one side restraint retained/);assert.equal(r.vMn,0);
+test('Church Street long panel calculates forces: cantilever vertical strip plus local a/b=1 horizontal actions',()=>{
+ const r=calc(5.5,2.43,2.43,2.43,20,9.1,20,'case4'),square=calc(2.43,2.43,2.43,2.43,20,9.1,20,'case4');
+ assert.equal(r.valid,true);assert.equal(r.method,'cantilever');
+ near(r.vMn,-(20*2.43**2/2+.5*20*2.43**3/6+.5*9.1*2.43**3/6));near(r.vV,20*2.43+.5*20*2.43**2/2+.5*9.1*2.43**2/2);near(r.vMp,0);
+ near(r.hMp,square.hMp);near(r.hMn,square.hMn);near(r.hV,square.hV);
 });
 test('square plate uses the published EM27 full-height triangular coefficients',()=>{
  const r=calc(2.43,2.43,2.43,2.43,20,9.1,20,'case4');assert.equal(r.valid,true);near(r.hMp,48.64811091147);near(r.hMn,-5.433954995745);near(r.hV,73.9542337515);near(r.vMp,58.982552455545);near(r.vMn,-6.75598386582);near(r.vV,105.476922387);
@@ -22,8 +25,9 @@ test('base-only cantilever is explicitly selected and has no invented horizontal
 test('dry and partial-height cantilever loads integrate actual pressure triangles',()=>{
  const r=calc(5,3,2,1,20,10,5,'cantilever');near(r.vMn,-(5*3**2/2+.5*20*2**3/6+.5*10*1**3/6));near(r.vV,5*3+.5*20*2**2/2+.5*10*1**2/2);
 });
-test('unsupported aspect ratios, partial plate loads and three-edge support are blocked',()=>{
- for(const args of [[1,2,2,2,20,10,5,'case4'],[2,2,1,1,20,10,5,'case4'],[2,2,2,2,20,10,5,'three'],[0,2,2,2,20,10,5,'cantilever'],[2,2,2,3,20,10,5,'cantilever']])assert.equal(calc(...args).valid,false);
+test('invalid inputs and three-edge support are blocked; other plate ratios and partial heights calculate',()=>{
+ for(const args of [[1,2,2,2,20,10,5,'case4'],[2,2,1,1,20,10,5,'case4'],[4,2,1,1,20,10,5,'case4']])assert.equal(calc(...args).valid,true);
+ for(const args of [[2,2,2,2,20,10,5,'three'],[0,2,2,2,20,10,5,'cantilever'],[2,2,2,3,20,10,5,'cantilever']])assert.equal(calc(...args).valid,false);
 });
 const actions={hMp:'51.028',hMn:'-5.664',hV:'70.561',vMp:'68.336',vMn:'-9.762',vV:'121.715',hServicePositive:'35',hServiceNegative:'-4',vServicePositive:'47',vServiceNegative:'-7'};
 test('manual analysis requires complete signed ULS/SLS actions and provenance',()=>{

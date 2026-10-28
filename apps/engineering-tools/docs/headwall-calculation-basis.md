@@ -8,7 +8,7 @@ USBR Engineering Monograph 27, Figure 27 (uniform load) and Figure 30 (full-heig
 
 Official reference: https://www.usbr.gov/tsc/techreferences/hydraulics_lab/pubs/EM/EM27.pdf (introduction, printed pages 5–6; Figures 27 and 30).
 
-For unsupported plate geometry, the app reports NOT ASSESSED and accepts independently verified ULS and service analysis actions with a reference and explicit confirmation. This is not a validated numerical plate solver for the Church Street geometry.
+Automatic actions are reinstated for all base + one side panels (29 October 2026). For a/b <= 1 the a/b = 1 coefficients are applied (an approximation below 1). For long panels (a/b > 1), vertical actions use a base-fixed cantilever strip integrating the actual soil, water and live pressure, and horizontal actions use the a/b = 1 local fixed-edge coefficients near the restrained side. Independently verified ULS and service actions can still be entered instead. This is not a validated numerical plate solver for the Church Street geometry.
 
 Base-only cantilever analysis is available only when explicitly selected. It integrates uniform lateral live pressure and partial-height soil/water triangles, using the workbook lateral soil coefficient K=0.5. Top and outer edges are free. The location and adequacy of the base restraint must be independently established.
 
@@ -16,7 +16,7 @@ Base-only cantilever analysis is available only when explicitly selected. It int
 
 Automatic uniform live pressure is horizontal wall pressure at service level, not vertical road surcharge. For K=0.5, the base pressure is K × total soil unit weight × retained height + (1−K) × water unit weight × water height. This subtracts buoyancy only in the submerged zone; a dry wall uses the full soil unit weight. The entered total soil unit weight and water unit weight generate effective-soil plus hydrostatic pressure; water height cannot exceed retained soil height. Front-face water is not automatically subtracted. Net-water load cases must be established by the designer.
 
-ULS multipliers start at 1.0 as unapproved placeholders and require explicit confirmation. Soil and water share one multiplier in automatic mode; distinct factors and other pressure models require external analysis actions. SLS moments are independently calculated at service pressure, never obtained by multiplying ULS positive moments by 0.7, 0.12 or 0.16.
+ULS multipliers start at 1.0 as unapproved placeholders; the tool reminds the designer to set project factors but no longer blocks the calculation. Soil and water share one multiplier in automatic mode; distinct factors and other pressure models require external analysis actions. SLS moments are independently calculated at service pressure, never obtained by multiplying ULS positive moments by 0.7, 0.12 or 0.16.
 
 ## Section checks
 
