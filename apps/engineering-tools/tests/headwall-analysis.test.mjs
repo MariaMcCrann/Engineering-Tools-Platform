@@ -82,3 +82,27 @@ test('turning RL mesh vertical moves the heavy wires into the vertical direction
  const standard=section(300,50,16,300,'RL1218','sec',40,500,0,0,1.75),turned=section(300,50,16,300,'RL1218','pri',40,500,0,0,1.75);
  assert.ok(turned.Ast-standard.Ast>800);
 });
+
+test('independent soil and water factors apply to effective soil plus hydrostatic pressure',()=>{
+ const args=[5.5,3,2,1,20,10,5,'cantilever'];
+ const u=calc(...args,{soil:1.5,water:1,surcharge:1});
+ // Effective soil moment = K*(gamma*hs^3 - gammaw*hw^3)/6; water moment = gammaw*hw^3/6.
+ near(u.vMp,1.5*.5*(20*8-10)/6+10/6+5*4/2);
+ near(u.vV,1.5*.5*(20*4-10)/2+10/2+5*2);
+ const service=calc(...args,{soil:1.2,water:1,surcharge:1});
+ near(service.vMp,1.2*.5*(20*8-10)/6+10/6+10);
+ for(const support of ['case4','cantilever']){
+  const base=calc(2,2,2,1,20,10,5,support);
+  const doubled=calc(2,2,2,1,20,10,5,support,{soil:2,water:2,surcharge:2});
+  for(const key of ['hMp','hMn','hV','vMp','vMn','vV'])near(doubled[key],2*base[key]);
+ }
+ assert.equal(calc(...args,{soil:NaN,water:1,surcharge:1}).valid,false);
+ assert.equal(calc(...args,{soil:1,water:0,surcharge:1}).valid,false);
+});
+test('AS5100 presets distinguish fill quality and reset water and surcharge factors',()=>{
+ const {HEADWALL_FACTOR_GUIDE:guide}=load('../app/StructuralLoadGenerators.tsx');
+ assert.equal(guide.length,2);
+ near(guide[0].soil,1.25);near(guide[0].slsSoil,1);
+ near(guide[1].soil,1.5);near(guide[1].slsSoil,1.2);
+ for(const row of guide){near(row.water,1);near(row.live,1);}
+});
