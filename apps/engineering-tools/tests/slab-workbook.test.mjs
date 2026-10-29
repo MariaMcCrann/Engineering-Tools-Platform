@@ -14,9 +14,12 @@ test('uploaded test workbook loading chain matches saved results',()=>{
 });
 test('uploaded test workbook bending and no-link shear capacities reconcile',()=>{
  const r=loading(inputs),face=section(300,50,16,400,'RL1218','pri',40,500,r.Mp,r.Msls,1.75);
- near(face.Ast,1614.8571637614937);near(face.phiMuo,121.42986686060163);
+ near(face.Ast,1614.8571637614937);
+ // Workbook C-cells give phiMuo 121.430 (phi 0.65, d to mesh wire). Tool now uses AS 3600-2018 ku-based phi (0.85 here)
+ // and d to the larger of N16 and mesh wire (d = 242 mm).
+ near(face.d,242);near(face.phi,.85);near(face.phiMuo,157.38595851378258);
  const check=shear(300,40,500,r.Mp,r.Mn,r.V,face,face,0,100,90,2);
- near(check.capacity,216.74876398770112);assert.equal(check.checks[0].pass,true);
+ near(check.capacity,214.66189279343524);assert.equal(check.checks[0].pass,true);
 });
 test('two-unit PDF and six-unit workbook are materially different load cases',()=>{
  const short=loading({...inputs,unitsLong:2}),long=loading(inputs);
