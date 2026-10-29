@@ -13,17 +13,17 @@ const near=(a,b)=>assert.ok(Math.abs(a-b)<1e-8,`${a} != ${b}`);
 test('Church Street long panel calculates forces: cantilever vertical strip plus local a/b=1 horizontal actions',()=>{
  const r=calc(5.5,2.43,2.43,2.43,20,9.1,20,'case4'),square=calc(2.43,2.43,2.43,2.43,20,9.1,20,'case4');
  assert.equal(r.valid,true);assert.equal(r.method,'cantilever');
- near(r.vMn,-(20*2.43**2/2+.5*20*2.43**3/6+.5*9.1*2.43**3/6));near(r.vV,20*2.43+.5*20*2.43**2/2+.5*9.1*2.43**2/2);near(r.vMp,0);
+ near(r.vMp,20*2.43**2/2+.5*20*2.43**3/6+.5*9.1*2.43**3/6);near(r.vV,20*2.43+.5*20*2.43**2/2+.5*9.1*2.43**2/2);near(r.vMn,0);
  near(r.hMp,square.hMp);near(r.hMn,square.hMn);near(r.hV,square.hV);
 });
 test('square plate uses the published EM27 full-height triangular coefficients',()=>{
  const r=calc(2.43,2.43,2.43,2.43,20,9.1,20,'case4');assert.equal(r.valid,true);near(r.hMp,48.64811091147);near(r.hMn,-5.433954995745);near(r.hV,73.9542337515);near(r.vMp,58.982552455545);near(r.vMn,-6.75598386582);near(r.vV,105.476922387);
 });
 test('base-only cantilever is explicitly selected and has no invented horizontal plate demand',()=>{
- const r=calc(1,2.43,2.43,2.43,20,9.1,20,'cantilever');assert.equal(r.valid,true);assert.equal(r.method,'cantilever');near(r.vMn,-93.845099475);near(r.vV,91.5581475);near(r.hMp,0);near(r.hV,0);
+ const r=calc(1,2.43,2.43,2.43,20,9.1,20,'cantilever');assert.equal(r.valid,true);assert.equal(r.method,'cantilever');near(r.vMp,93.845099475);near(r.vMn,0);near(r.vV,91.5581475);near(r.hMp,0);near(r.hV,0);
 });
 test('dry and partial-height cantilever loads integrate actual pressure triangles',()=>{
- const r=calc(5,3,2,1,20,10,5,'cantilever');near(r.vMn,-(5*3**2/2+.5*20*2**3/6+.5*10*1**3/6));near(r.vV,5*3+.5*20*2**2/2+.5*10*1**2/2);
+ const r=calc(5,3,2,1,20,10,5,'cantilever');near(r.vMp,5*2**2/2+.5*20*2**3/6+.5*10*1**3/6);near(r.vV,5*2+.5*20*2**2/2+.5*10*1**2/2);
 });
 test('invalid inputs and three-edge support are blocked; other plate ratios and partial heights calculate',()=>{
  for(const args of [[1,2,2,2,20,10,5,'case4'],[2,2,1,1,20,10,5,'case4'],[4,2,1,1,20,10,5,'case4']])assert.equal(calc(...args).valid,true);
@@ -63,4 +63,22 @@ test('unit pressure benchmarks separate uniform Figure 27 from triangular Figure
 
 test('dry plate does not subtract buoyancy where there is no groundwater',()=>{
  const dry=calc(2,2,2,0,20,9.81,0,'case4');near(dry.deadPressure,20);near(dry.hMp,.0662*20*4);near(dry.vMp,.1157*20*4);
+});
+
+test('ST043566: surcharge acts over retained soil only and the cantilever base moment matches the plate sign',()=>{
+ const long=calc(5.5,3.04,2.43,2.43,20,9.81,20,'case4');
+ near(long.vMp,20*2.43**2/2+.5*20*2.43**3/6+.5*9.81*2.43**3/6);assert.ok(Math.abs(long.vMp-94.7)<.1);near(long.vMn,0);
+ const square=calc(2.43,2.43,2.43,2.43,20,9.81,20,'case4');assert.ok(square.vMp>0&&square.vMp>Math.abs(square.vMn));
+});
+
+test('crack width selector: 0.3 keeps workbook tables; 0.2 and 0.4 use Eurocode 2 limits in order',()=>{
+ near(limit(250,20,300,'SL81','pri',500),200);near(limit(250,20,300,'SL81','pri',500,.3),200);
+ // N20 @ 150: EC2 0.4 mm spacing table allows 320 MPa; 0.2 mm spacing table allows 200 MPa.
+ near(limit(350,20,150,'None','pri',500,.4),320);near(limit(350,20,150,'None','pri',500,.2),200);
+ for(const [db,s] of [[16,300],[20,200],[12,100],[24,250]]){const l2=limit(300,db,s,'None','pri',500,.2),l4=limit(300,db,s,'None','pri',500,.4);assert.ok(l2<l4,`${db}@${s}`);assert.ok(l4<=400);}
+});
+
+test('turning RL mesh vertical moves the heavy wires into the vertical direction',()=>{
+ const standard=section(300,50,16,300,'RL1218','sec',40,500,0,0,1.75),turned=section(300,50,16,300,'RL1218','pri',40,500,0,0,1.75);
+ assert.ok(turned.Ast-standard.Ast>800);
 });
