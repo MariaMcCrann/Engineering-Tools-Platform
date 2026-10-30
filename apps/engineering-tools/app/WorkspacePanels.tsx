@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+
+import { exportProjectFile, parseProjectFile, projectFilename, MAX_PROJECT_FILE_BYTES } from "./project-transfer";
 
 export type SavedProject = {
   id: string;
@@ -12,7 +14,7 @@ export type SavedProject = {
   inputs?: SavedInput[];
 };
 
-export type SavedInput = { index: number; tag: string; type: string; value: string; checked?: boolean };
+export type SavedInput = { index: number; tag: string; type: string; value: string; checked?: boolean; key?: string };
 
 export const SAVED_PROJECTS_KEY = "engineering-tools-saved-projects";
 
@@ -31,13 +33,42 @@ export function persistSavedProjects(projects: SavedProject[]) {
   window.localStorage.setItem(SAVED_PROJECTS_KEY, JSON.stringify(projects));
 }
 
-export function SavedProjectsPanel({ projects, onOpen, onDelete, onBack }: { projects: SavedProject[]; onOpen: (project: SavedProject) => void; onDelete: (id: string) => void; onBack: () => void }) {
+export function SavedProjectsPanel({ projects, onOpen, onDelete, onBack, onImport, supportedTools }: { projects: SavedProject[]; onOpen: (project: SavedProject) => void; onDelete: (id: string) => void; onBack: () => void; onImport: (project: SavedProject) => void; supportedTools: string[] }) {
+  const fileInput = useRef<HTMLInputElement>(null);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [pending, setPending] = useState<SavedProject | null>(null);
+  const [reading, setReading] = useState(false);
+  const exportProject = (project: SavedProject) => {
+    setError(""); setNotice("");
+    try {
+      const data = exportProjectFile({...project, inputs: project.inputs?.filter(v=>!["file","password","hidden","submit","button","reset","image"].includes(v.type))});
+      const url = URL.createObjectURL(new Blob([data], {type:"application/json"}));
+      const a = document.createElement("a"); a.href = url; a.download = projectFilename(project.name);
+      document.body.appendChild(a); a.click(); a.remove(); window.setTimeout(()=>URL.revokeObjectURL(url),1000);
+      setNotice(`Exported “${project.name}”. Send the downloaded project file to your colleague.`);
+    } catch(e) { setError(e instanceof Error ? e.message : "Could not export this project."); }
+  };
   return <div className="panel-view">
     <div className="dashboard-section-head"><div><button className="dashboard-back" onClick={onBack}>← Dashboard</button><h2>Saved Projects</h2></div></div>
+    <div className="saved-project-transfer">
+      <button type="button" className="save-project-trigger" disabled={reading} onClick={()=>fileInput.current?.click()}>{reading ? "Reading project…" : "Import project"}</button>
+      <input ref={fileInput} type="file" accept=".json,application/json" aria-label="Import project file" hidden onChange={async e=>{
+        const file=e.target.files?.[0]; e.target.value=""; if(!file)return;
+        setError(""); setNotice(""); setPending(null); setReading(true);
+        try { if(file.size>MAX_PROJECT_FILE_BYTES)throw new Error("Project files must be smaller than 5 MB."); setPending(parseProjectFile(await file.text(),supportedTools)); }
+        catch(err){setError(err instanceof Error?err.message:"Could not read this project file.");}
+        finally{setReading(false);}
+      }}/>
+      <p>Export a project file and send it to a colleague. They can import a separate editable copy here. Changes are not synced. Uploaded source files are not included.</p>
+    </div>
+    {error&&<p role="alert" className="saved-project-error">{error}</p>}
+    {notice&&<p role="status">{notice}</p>}
+    {pending&&<section className="saved-project-import"><h3>Import project</h3><strong>{pending.name}</strong><p>{pending.toolLabel}{pending.note?` · ${pending.note}`:""}</p><p>This adds a new copy without replacing existing projects. Check the restored inputs before using the results.</p><button type="button" onClick={()=>{try{onImport(pending);setNotice(`Imported “${pending.name}”. Select Open to review and recalculate.`);setPending(null);}catch{setError("Could not save the imported project. Your browser storage may be full.");}}}>Import copy</button><button type="button" onClick={()=>setPending(null)}>Cancel</button></section>}
     {!projects.length ? <div className="dashboard-empty">No saved projects yet. Open a tool and use "Save as project" to keep it here for quick access.</div> : <div className="saved-project-list">
       {projects.slice().sort((a, b) => b.savedAt - a.savedAt).map((p) => <div className="saved-project-card" key={p.id}>
         <div><strong>{p.name}</strong><small>{p.toolLabel}{p.note ? ` · ${p.note}` : ""}</small><em>{new Date(p.savedAt).toLocaleDateString()}</em></div>
-        <div className="saved-project-actions"><button onClick={() => onOpen(p)}>Open →</button><button className="danger" onClick={() => onDelete(p.id)}>Delete</button></div>
+        <div className="saved-project-actions"><button onClick={() => onOpen(p)}>Open →</button><button type="button" onClick={() => exportProject(p)}>Export project</button><button className="danger" onClick={() => onDelete(p.id)}>Delete</button></div>
       </div>)}
     </div>}
   </div>;

@@ -29,6 +29,8 @@ import { PipelinePumpSizingTool } from "./PipelinePumpSizingTool";
 import { EngineeringDashboard, DashboardCategory, DashboardTool, HANDBOOK_ITEMS } from "./EngineeringDashboard";
 import { SavedProjectsPanel, SaveProjectControl, CalculationTemplatesPanel, SavedProject, SavedInput, loadSavedProjects, persistSavedProjects } from "./WorkspacePanels";
 
+import { captureProjectInputs, restoreProjectInputs } from "./project-inputs";
+
 type ViewKey = "design-review" | "design-checklist" | "tools" | "saved-projects" | "templates" | "rorb" | "rational" | "channel" | "storage" | "overland" | "rising" | "gsdm" | "spillway" | "culvert" | "headloss" | "pipe-sizing" | "pipeline-hgl" | "rock-protection" | "headwall-concrete" | "base-slab-concrete" | "broad-crested-weir" | "drowned-sluice-gate" | "thrust-at-bends" | "buried-flexible-pipe" | "v-notch-weir" | "pit-surge" | "pump-duty-point" | "cantilever-wall" | "sediment-pond" | "regulator-design" | "pipeline-pump-sizing" | "proposal" | "site-intelligence";
 type ToolEntry = DashboardTool & { view: Exclude<ViewKey, "tools" | "saved-projects" | "templates"> };
 
@@ -94,8 +96,7 @@ export default function Home() {
   useEffect(() => { setSavedProjects(loadSavedProjects()); }, []);
 
   const saveProject = (project: SavedProject) => {
-    const controls = Array.from(toolRoot.current?.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>("input, select, textarea") ?? []).filter(el=>!el.closest("header, .save-project-form"));
-    const inputs: SavedInput[] = controls.map((el,index)=>({index,tag:el.tagName,type:el.type,value:el.value,checked:el instanceof HTMLInputElement ? el.checked : undefined}));
+    const inputs = toolRoot.current ? captureProjectInputs(toolRoot.current) : [];
     project = {...project,inputs};
     setActiveProject(project);
     setSavedProjects((prev) => {
@@ -107,23 +108,13 @@ export default function Home() {
   useEffect(() => {
     if(!activeProject?.inputs?.length || !toolRoot.current || view!==activeProject.toolView)return;
     const restore=()=>{
-      const controls=Array.from(toolRoot.current?.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>("input, select, textarea") ?? []).filter(el=>!el.closest("header, .save-project-form"));
-      for(const saved of activeProject.inputs ?? []){
-        const el=controls[saved.index];
-        if(!el||el.tagName!==saved.tag||el.type!==saved.type||el.type==="file")continue;
-        if(el instanceof HTMLInputElement && (el.type==="checkbox"||el.type==="radio")){
-          if(el.checked!==Boolean(saved.checked))el.click();
-        }else if(el.value!==saved.value){
-          const proto=el instanceof HTMLTextAreaElement?HTMLTextAreaElement.prototype:el instanceof HTMLSelectElement?HTMLSelectElement.prototype:HTMLInputElement.prototype;
-          Object.getOwnPropertyDescriptor(proto,"value")?.set?.call(el,saved.value);
-          el.dispatchEvent(new Event(el instanceof HTMLSelectElement?"change":"input",{bubbles:true}));
-        }
-      }
+      if (toolRoot.current) restoreProjectInputs(toolRoot.current, activeProject.inputs ?? []);
     };
     restore();
     const retry=window.setTimeout(restore,50);
     const finalRetry=window.setTimeout(restore,200);
-    return()=>{window.clearTimeout(retry);window.clearTimeout(finalRetry);};
+    const conditionalRetry=window.setTimeout(restore,500);
+    return()=>{window.clearTimeout(retry);window.clearTimeout(finalRetry);window.clearTimeout(conditionalRetry);};
   },[activeProject,projectRevision,view]);
   const deleteProject = (id: string) => {
     setSavedProjects((prev) => {
@@ -141,7 +132,11 @@ export default function Home() {
     <header className="hub-header"><span>{label}</span><SaveProjectControl toolView={key} toolLabel={label} onSave={saveProject} existing={activeProject?.toolView===key?activeProject:undefined} /></header>
   );
 
-  const selectedTool = view === "saved-projects" ? <SavedProjectsPanel projects={savedProjects} onOpen={(project) => {setActiveProject(project);setProjectRevision(v=>v+1);setView(project.toolView as ViewKey);}} onDelete={deleteProject} onBack={() => setView("tools")}/>
+  const selectedTool = view === "saved-projects" ? <SavedProjectsPanel projects={savedProjects} onOpen={(project) => {setActiveProject(project);setProjectRevision(v=>v+1);setView(project.toolView as ViewKey);}} onImport={(project) => {
+      const next = [...savedProjects, project];
+      persistSavedProjects(next);
+      setSavedProjects(next);
+    }} supportedTools={TOOL_CATEGORIES.flatMap(c=>c.tools).filter(t=>!t.disabled&&!t.externalUrl&&t.view!=="design-review").map(t=>t.view)} onDelete={deleteProject} onBack={() => setView("tools")}/>
     : view === "design-review" ? <DesignReviewTool/>
     : view === "design-checklist" ? <>{toolHeader("Design Checklist", "design-checklist")}<DesignChecklistTool/></>
     : view === "templates" ? <CalculationTemplatesPanel onOpen={(v) => setView(v as ViewKey)} onBack={() => setView("tools")}/>
