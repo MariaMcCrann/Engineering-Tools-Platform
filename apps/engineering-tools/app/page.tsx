@@ -10,6 +10,7 @@ import { GsdmPmpTool } from "./GsdmPmpTool";
 import { RationalMethodTool } from "./RationalMethodTool";
 import { SpillwayTool } from "./SpillwayTool";
 import { CulvertTool } from "./CulvertTool";
+import { LiftingBeamTool } from "./LiftingBeamTool";
 import { HeadlossTool } from "./HeadlossTool";
 import { PipeSizingTool, PipelineHglTool } from "./pipeline-tools";
 import { RockProtectionTool } from "./RockProtectionTool";
@@ -31,7 +32,7 @@ import { SavedProjectsPanel, SaveProjectControl, CalculationTemplatesPanel, Save
 
 import { captureProjectInputs, restoreProjectInputs } from "./project-inputs";
 
-type ViewKey = "design-review" | "design-checklist" | "tools" | "saved-projects" | "templates" | "rorb" | "rational" | "channel" | "storage" | "overland" | "rising" | "gsdm" | "spillway" | "culvert" | "headloss" | "pipe-sizing" | "pipeline-hgl" | "rock-protection" | "headwall-concrete" | "base-slab-concrete" | "broad-crested-weir" | "drowned-sluice-gate" | "thrust-at-bends" | "buried-flexible-pipe" | "v-notch-weir" | "pit-surge" | "pump-duty-point" | "cantilever-wall" | "sediment-pond" | "regulator-design" | "pipeline-pump-sizing" | "proposal" | "site-intelligence";
+type ViewKey = "lifting-beams" | "design-review" | "design-checklist" | "tools" | "saved-projects" | "templates" | "rorb" | "rational" | "channel" | "storage" | "overland" | "rising" | "gsdm" | "spillway" | "culvert" | "headloss" | "pipe-sizing" | "pipeline-hgl" | "rock-protection" | "headwall-concrete" | "base-slab-concrete" | "broad-crested-weir" | "drowned-sluice-gate" | "thrust-at-bends" | "buried-flexible-pipe" | "v-notch-weir" | "pit-surge" | "pump-duty-point" | "cantilever-wall" | "sediment-pond" | "regulator-design" | "pipeline-pump-sizing" | "proposal" | "site-intelligence";
 type ToolEntry = DashboardTool & { view: Exclude<ViewKey, "tools" | "saved-projects" | "templates"> };
 
 const TOOL_CATEGORIES: DashboardCategory[] = [
@@ -60,6 +61,7 @@ const TOOL_CATEGORIES: DashboardCategory[] = [
     { view: "pipeline-pump-sizing", icon: "PP", label: "Pipeline and Pump Sizing", desc: "Colebrook–White system curve across up to 8 pipe sections, intersected with up to 3 pump candidates — duty points, NPSHa and motor sizing." },
   ]},
   { key: "structures", label: "Structures", description: "Concrete headwalls, slabs and structural checks.", icon: "▥", tools: [
+    { view: "lifting-beams", icon: "LB", label: "Lifting Beams", desc: "Bridge lifting beam actions, deflection, sling forces and directly calculated load envelopes. Preliminary member checks.", badge: "New" },
     { view: "headwall-concrete", icon: "HW", label: "Headwall Concrete", desc: "AS 3600 headwall bending, minimum steel and shear screening checks." },
     { view: "base-slab-concrete", icon: "BS", label: "Base Slab Concrete", desc: "AS 3600 reinforced base-slab design checks from the supplied workbook." },
     { view: "buried-flexible-pipe", icon: "FP", label: "Buried Flexible Pipe", desc: "AS2566.1 deflection, strength and buckling checks for buried flexible pipe." },
@@ -136,7 +138,7 @@ export default function Home() {
       const next = [...savedProjects, project];
       persistSavedProjects(next);
       setSavedProjects(next);
-    }} supportedTools={TOOL_CATEGORIES.flatMap(c=>c.tools).filter(t=>!t.disabled&&!t.externalUrl&&t.view!=="design-review").map(t=>t.view)} onDelete={deleteProject} onBack={() => setView("tools")}/>
+    }} supportedTools={TOOL_CATEGORIES.flatMap(c=>c.tools).filter(t=>!t.disabled&&!t.externalUrl&&t.view!=="design-review"&&t.view!=="lifting-beams").map(t=>t.view)} onDelete={deleteProject} onBack={() => setView("tools")}/>
     : view === "design-review" ? <DesignReviewTool/>
     : view === "design-checklist" ? <>{toolHeader("Design Checklist", "design-checklist")}<DesignChecklistTool/></>
     : view === "templates" ? <CalculationTemplatesPanel onOpen={(v) => setView(v as ViewKey)} onBack={() => setView("tools")}/>
@@ -149,6 +151,7 @@ export default function Home() {
     : view === "pipe-sizing" ? <>{toolHeader("Pipe Sizing", "pipe-sizing")}<PipeSizingTool/></>
     : view === "pipeline-hgl" ? <>{toolHeader("Pipeline HGL", "pipeline-hgl")}<PipelineHglTool/></>
     : view === "rock-protection" ? <>{toolHeader("Rock Protection / Riprap", "rock-protection")}<RockProtectionTool/></>
+    : view === "lifting-beams" ? <><header className="hub-header"><span>Lifting Beams</span><a href="/lifting-beams" target="_blank" rel="noopener noreferrer">Open full page</a></header><LiftingBeamTool/></>
     : view === "headwall-concrete" ? <>{toolHeader("Headwall Concrete", "headwall-concrete")}<HeadwallStructuralTool/></>
     : view === "base-slab-concrete" ? <>{toolHeader("Base Slab Concrete", "base-slab-concrete")}<BaseSlabStructuralTool/></>
     : view === "rising" ? <>{toolHeader("Rising Main", "rising")}<RisingMainTool/></>
