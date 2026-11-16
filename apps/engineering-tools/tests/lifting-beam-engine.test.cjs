@@ -7,7 +7,7 @@ const B=context.module.exports;
 const assert=require('node:assert/strict');
 const s=B.defaults();
 function near(x,y,tol=1e-6){assert.ok(Math.abs(x-y)<=tol,`${x} differs from ${y}`);}
-let p={...s,n:1,o:0,mass:1e-9,gG:1,gQ:1,loads:[{type:'point',mass:10/B.g,width:0,center:s.L/2}]};
+let p={...s,catalogueId:'custom',capBasis:'section',n:1,o:0,mass:1e-9,gG:1,gQ:1,loads:[{type:'point',mass:10/B.g,width:0,center:s.L/2}]};
 let r=B.calculate(p).beams[0];near(r.u.RA,5);near(r.u.maxM,10*s.L/4);
 const EI=s.E*1000*s.I*1e-12,GA=s.G*1000*s.As*1e-6;
 near(r.v.maxD,1000*(10*s.L**3/(48*EI)+10*s.L/(4*GA)),1e-5);
@@ -27,3 +27,25 @@ let actual={...s,gG:1,gQ:1,loads:[{type:'udl',mass:196/B.g,width:5,center:3.95},
 let a=B.calculate(actual).beams[0];near(a.v.maxD,28.8,.1);near(a.u.maxM*2,547,.2);
 let angle=B.calculate({...s,angle:30}).beams[0];near(angle.sling,angle.u.RA/Math.cos(Math.PI/6));near(angle.H,angle.u.RA*Math.tan(Math.PI/6));
 console.log('Analytical beam, deflection, sharing, sling-force, ceiling and input-validation checks passed. Saved Tedds test-pattern deflection reproduced within 0.1 mm.');
+
+for(const section of B.sections){
+ const state=B.sectionState(B.defaults(),section.id);
+ assert.equal(state.mass,section.mass);
+ assert.ok(state.Mcap>0 && state.Mcap<=state.sectionM);
+ const limit=B.ceiling(state);
+ near(B.calculate(state,limit.mass/state.loads[0].mass).ratio,1,1e-6);
+ assert.ok(B.sectionState({...state,effectiveLength:15},section.id).Mcap<B.sectionState({...state,effectiveLength:3},section.id).Mcap);
+ assert.ok(B.ceiling({...state,share:70}).mass<B.ceiling({...state,share:50}).mass);
+}
+const chosen=B.sectionState(B.defaults(),'410UB59.7');
+near(chosen.I,216e6);near(chosen.Z,1060e3);near(chosen.mass,59.7);
+near(B.sectionState({...B.defaults(),capBasis:'section'},'460UB67.1').Mcap,399.6);
+const independent={...B.defaults(),capBasis:'verified',Mcap:123,Vcap:456};
+near(B.resolveState(independent).Mcap,123);near(B.resolveState(independent).Vcap,456);
+assert.ok(B.validate({...s,effectiveLength:0}).length);
+assert.ok(B.validate({...s,catalogueId:'unknown'}).length);
+assert.ok(B.validate({...s,catalogueId:'custom',capBasis:'ltb'}).length);
+assert.equal(B.comparison(s).status,'exceeded');
+assert.ok(B.comparison(s).remaining<0);
+assert.equal(B.comparison({...s,loads:[{type:'point',mass:0,width:0,center:3.95}]}).ceiling,null);
+console.log('UB catalogue, buckling screening, sharing sensitivity, capacity limits and deck comparisons passed.');
