@@ -7,7 +7,7 @@ export const metadata = {
 };
 
 export default function LiftingBeamsPage() {
-  return <main className="app-shell">
+  return <main className="app-shell" style={{ display: "block" }}>
     <section className="workspace" style={{ marginLeft: 0, width: "100%" }}>
       <header className="hub-header"><span>Lifting Beams</span><Link href="/">All engineering tools</Link></header>
       <LiftingBeamTool />
