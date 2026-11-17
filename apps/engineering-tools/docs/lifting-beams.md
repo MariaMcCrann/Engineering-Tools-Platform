@@ -35,3 +35,11 @@ Save/Open JSON and browser persistence are retained. Cases without a catalogue I
 Run `node tests/lifting-beam-engine.test.cjs`. Tests cover analytical actions/deflection, overhang weight, sharing, sling demand, saved Tedds loading, every catalogue UB's limit convergence, effective-length sensitivity, unequal sharing, verified capacity preservation, invalid section IDs and deck comparison.
 
 The buildless calculator is included by the platform's normal production build.
+
+## Additional WLL factor and clear demand/capacity display
+
+The editable additional WLL factor defaults to 1.5 and must be >= 1.0. Calculated WLL estimate = current-pattern member payload ceiling / factor. This is separate from gammaQ and does not alter strength/service actions. No 0.8 load-test strength reduction is applied; existing equipment ratings remain unchanged. Legacy saved cases receive the new 1.5 default when absent. The factor is included in Save/Open, print, CSV, envelope and section comparisons.
+
+The deck verdict uses the WLL estimate; the original member utilisation and limits remain separate. Thus a load may satisfy the member checks and still fail the WLL estimate. Failure is displayed with red text/border and a direct status message. Automatic size suggestions search heavier, equally deep or deeper catalogue UBs under unchanged geometry, load sharing, restraint assumptions and factors. Only candidates meeting the additional-factor screening are suggested. Custom/verified member capacities are never transferred to another section; no candidate is claimed suitable as a complete lifting assembly.
+
+Capacity fields display one decimal place while automatic catalogue calculations retain full precision. Applied bending/shear demands and calculated displacement are explicitly labelled, with capacity/deflection limits named beneath them.
