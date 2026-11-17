@@ -30,16 +30,30 @@ function sectionState(s,id){
 function resolveState(s){return s.catalogueId&&s.catalogueId!=='custom'?sectionState(s,s.catalogueId):s;}
 function comparison(s){
  const r=calculate(s);if(r.errors.length)return {errors:r.errors};
- const c=ceiling(s);
- return {errors:[],payload:r.payload,ceiling:c?.mass??null,remaining:c?c.mass-r.payload:null,
+ const c=ceiling(s),wllFactor=s.wllFactor??1.5,wll=c?c.mass/wllFactor:null;
+ return {errors:[],wllFactor,wll,wllRemaining:wll===null?null:wll-r.payload,wllUtilisation:wll===null?null:wll>0?r.payload/wll:r.payload>0?Infinity:0,wllStatus:wll===null?'unavailable':r.payload>wll+1e-9?'exceeded':'within',payload:r.payload,ceiling:c?.mass??null,remaining:c?c.mass-r.payload:null,
   governing:c?.governing??r.governing,ratio:r.ratio,
   status:r.ratio>1?'exceeded':'within',
   scope:s.capBasis==='verified'?'Entered member capacities':'Preliminary member screening'};
 }
 
-const defaults=()=>({catalogueId:'460UB67.1',effectiveLength:7.9,project:'Bridge deck lift',number:'',designer:'Maria',section:'460 UB 67.1',L:7.9,o:0.3,mass:67.1,E:200000,G:80000,I:295800000,As:3859,Z:1303000,Mcap:399.33,Vcap:625.16,capBasis:'ltb',share:50,n:2,dynamic:1,gG:1.2,gQ:1.5,defRatio:250,stiffness:1,angle:0,loads:[{type:'udl',mass:27.3,width:7.5,center:3.95}]});
+function suggestSection(s){
+ const errors=validate(s);if(errors.length)return {reason:errors[0]};
+ if(s.n!==2)return {reason:'Single-beam mode is analysis only; review the lifting arrangement.'};
+ const current=sections.find(p=>p.id===s.catalogueId);
+ if(!current||s.capBasis==='verified')return {reason:'Select a catalogue UB with an automatic capacity basis to compare larger sizes. Verified capacities cannot be transferred to another UB.'};
+ if(s.loads.reduce((sum,l)=>sum+l.mass,0)<=0)return {reason:'Enter a non-zero payload before sizing.'};
+ const candidates=sections.filter(p=>p.mass>current.mass&&p.d>=current.d).sort((a,b)=>a.mass-b.mass);
+ for(const section of candidates){
+  const next=sectionState(s,section.id),r=calculate(next,s.wllFactor??1.5);
+  if(!r.errors.length&&r.ratio<=1){return {section:section.name,...comparison(next)};}
+ }
+ return {reason:'No larger UB in this catalogue meets the calculated WLL screening for these inputs. Review the lifting arrangement or obtain a separately designed lifting system.'};
+}
+const defaults=()=>({catalogueId:'460UB67.1',effectiveLength:7.9,wllFactor:1.5,project:'Bridge deck lift',number:'',designer:'Maria',section:'460 UB 67.1',L:7.9,o:0.3,mass:67.1,E:200000,G:80000,I:295800000,As:3859,Z:1303000,Mcap:399.33,Vcap:625.16,capBasis:'ltb',share:50,n:2,dynamic:1,gG:1.2,gQ:1.5,defRatio:250,stiffness:1,angle:0,loads:[{type:'udl',mass:27.3,width:7.5,center:3.95}]});
 function validate(s){
  let e=[];
+ if(!Number.isFinite(s.wllFactor??1.5)||(s.wllFactor??1.5)<1)e.push('WLL calculation factor must be at least 1.0.');
  if(!['section','ltb','verified'].includes(s.capBasis))e.push('Select a valid capacity basis.');
  if(s.catalogueId&&s.catalogueId!=='custom'&&!sections.some(p=>p.id===s.catalogueId))e.push('Unknown UB section.');
  if(s.capBasis==='ltb'&&(!Number.isFinite(s.effectiveLength)||s.effectiveLength<=0))e.push('Effective buckling length must be greater than zero.');
@@ -90,5 +104,5 @@ function ceiling(s){
  const r=calculate(s,low);return {mass:base*low,governing:r.governing};
 }
 function envelope(s,widths){return widths.map(width=>{let state={...s,loads:[{type:'udl',mass:1,width,center:s.L/2}]};let c=ceiling(state);return {width,...c};});}
-const api={sections,sectionSource,sectionState,resolveState,comparison,g,defaults,validate,response,calculate,ceiling,envelope};if(typeof module!=='undefined')module.exports=api;else root.BeamEngine=api;
+const api={sections,sectionSource,sectionState,resolveState,comparison,suggestSection,g,defaults,validate,response,calculate,ceiling,envelope};if(typeof module!=='undefined')module.exports=api;else root.BeamEngine=api;
 })(typeof window!=='undefined'?window:globalThis);
