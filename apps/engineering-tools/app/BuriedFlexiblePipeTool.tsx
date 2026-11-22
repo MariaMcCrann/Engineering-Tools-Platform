@@ -53,7 +53,9 @@ export function BuriedFlexiblePipeTool() {
   const [allowableStrain, setAllowableStrain] = useState("1");
   const [bucklingSafetyFactor, setBucklingSafetyFactor] = useState("2.5");
 
-  const selectedWall = pipeWalls[diameter]?.[classIndex];
+  const selectedWall = diameter === "560" && material === "PE100" && sdrs[classIndex] === 11
+    ? 50.8
+    : pipeWalls[diameter]?.[classIndex];
   const effectiveDiameter = automatic ? String(Number(diameter) / 1000) : outsideDiameter;
   const effectiveWall = automatic ? String(selectedWall ?? NaN) : wallThickness;
   const effectiveModulus = automatic ? (material === "PE100" ? "260" : "200") : ringBendingModulus;
@@ -145,7 +147,7 @@ export function BuriedFlexiblePipeTool() {
         {automatic && <div className="calc-fields">
           <label className="calc-field"><span>Outside diameter (mm)</span><select value={diameter} onChange={e => setDiameter(e.target.value)}>{Object.keys(pipeWalls).map(d => <option key={d}>{d}</option>)}</select></label>
           <label className="calc-field"><span>Material</span><select value={material} onChange={e => setMaterial(e.target.value)}><option>PE100</option><option>PE80</option></select></label>
-          <label className="calc-field"><span>Pipe class / SDR</span><select value={classIndex} onChange={e => setClassIndex(Number(e.target.value))}>{sdrs.map((sdr, i) => <option key={sdr} value={i} disabled={pipeWalls[diameter][i] == null}>SDR {sdr}{pressureClasses[material][i] ? ` / ${pressureClasses[material][i]}` : ""}</option>)}</select></label>
+          <label className="calc-field"><span>Pipe class / SDR</span><select data-report-option-label value={classIndex} onChange={e => setClassIndex(Number(e.target.value))}>{sdrs.map((sdr, i) => <option key={sdr} value={i} disabled={pipeWalls[diameter][i] == null}>SDR {sdr}{pressureClasses[material][i] ? ` / ${pressureClasses[material][i]}` : ""}</option>)}</select></label>
           <label><input type="checkbox" checked={pressureService} onChange={e => setPressureService(e.target.checked)} /> Pressure pipe (4% deflection limit)</label>
           <Metric name="Wall thickness — workbook catalogue" value={fmt(Number(effectiveWall), 3) + " mm"} />
           <Metric name="Long-term modulus" value={effectiveModulus + " MPa"} />
