@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { AbutmentStability } from "./AbutmentStability";
 
 export function peakReaction(span: number, axles: number[][]) {
   let peak = 0;
@@ -108,7 +109,8 @@ export function BankSeatTool() {
           </dd></div>
         ))}
       </dl>
-      <p>Seat flexure, shear, edge effects, horizontal actions, restraints and foundation checks require the actual bearing and support layout.</p>
+      <AbutmentStability permanent={valid ? permanent : NaN} traffic={traffic} />
+      <p>Seat flexure, shear, edge effects and restraint design require the actual bearing and support layout.</p>
     </div>
   );
 }
