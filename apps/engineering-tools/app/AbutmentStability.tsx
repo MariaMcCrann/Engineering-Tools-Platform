@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { BankSeatDiagram } from "./BankSeatDiagrams";
+import { parseSeatTransfer, readSeatTransfer } from "./bank-seat-transfer";
 
 type Force = { vertical: number; horizontal: number; arm: number; height: number };
 type Case = {
@@ -88,16 +89,24 @@ const caseFields = [
   ["extra", "Design additional horizontal force (kN)"],
 ] as const;
 
-export function AbutmentStability({ permanent, superimposed, traffic, trafficOptions }: {
-  permanent: number; superimposed: number; traffic: number;
-  trafficOptions: { name: string; value: number }[];
-}) {
+const subscribeToSeatTransfer = () => () => {};
+const emptySeatTransfer = () => "";
+
+export function AbutmentStability() {
+  const storedTransfer = useSyncExternalStore(subscribeToSeatTransfer, readSeatTransfer, emptySeatTransfer);
+  const linked = parseSeatTransfer(storedTransfer);
   const [foundation, setFoundation] = useState("spread");
   const [inputs, setInputs] = useState<Record<string, string>>({});
   const [cases, setCases] = useState(initialCases.map((item, i) => ({ ...item, template: i })));
   const [positions, setPositions] = useState("");
   const read = (raw?: string) => raw?.trim() ? Number(raw) : NaN;
   const value = (key: string) => read(inputs[key]);
+  const deckAction = (key: string, transferred?: number | null) =>
+    inputs[key] === undefined ? transferred ?? NaN : value(key);
+  const permanent = deckAction("deckPermanent", linked?.permanent);
+  const superimposed = deckAction("deckSuperimposed", linked?.superimposed ?? 0);
+  const traffic = deckAction("deckTraffic", linked?.traffic);
+  const trafficOptions = linked?.trafficOptions ?? [];
   const nonnegative = (items: number[]) => items.every(item => Number.isFinite(item) && item >= 0);
   const hasGeometry = nonnegative(geometry.map(([key]) => value(key))) &&
     value("length") > 0 && value("concrete") > 0 && (value("height") === 0 || value("density") > 0 && value("ka") > 0);
@@ -111,14 +120,22 @@ export function AbutmentStability({ permanent, superimposed, traffic, trafficOpt
     ? width > 0 && value("bearing") <= width && value("centroid") <= width
     : piles.length > 0 && piles.length <= 100 && nonnegative(piles);
   const display = (n: number) => Number.isFinite(n) ? n.toFixed(2) : "—";
-  const input = ([key, label]: readonly [string, string]) => <label key={key} className="grid gap-1">{label}
+  const input = ([key, label]: readonly [string, string], initial?: number) => <label key={key} className="grid gap-1">{label}
     <input className="rounded border border-slate-400 px-3 py-2" type="number" min="0" step="any"
-      value={inputs[key] ?? ""} onChange={e => setInputs({ ...inputs, [key]: e.target.value })} /></label>;
+      value={inputs[key] ?? initial ?? ""} onChange={e => setInputs({ ...inputs, [key]: e.target.value })} /></label>;
   const change = (index: number, patch: Partial<Case>) =>
     setCases(cases.map((item, i) => i === index ? { ...item, ...patch } : item));
 
   return <section aria-labelledby="foundation-checks" className="grid gap-5 border-t border-slate-400 pt-5">
     <h2 id="foundation-checks" className="text-xl font-semibold">Abutment and foundation checks</h2>
+    <fieldset className="grid gap-3 rounded border border-slate-400 p-4 sm:grid-cols-3">
+      <legend className="px-1 font-semibold">Nominal deck reactions for one seat</legend>
+      {input(["deckPermanent", "Structural dead-load reaction (kN)"], linked?.permanent ?? undefined)}
+      {input(["deckSuperimposed", "Superimposed dead-load reaction (kN)"], linked?.superimposed ?? 0)}
+      {input(["deckTraffic", "Peak traffic reaction including dynamics (kN)"], linked?.traffic ?? undefined)}
+    </fieldset>
+    <p>{linked ? "Values available from the bank seat calculator are prefilled. You can edit the totals for this abutment."
+      : "Enter the deck reactions for this abutment, or open these checks from Bridge Bank Seat to transfer calculated values."}</p>
     <BankSeatDiagram view="abutment" />
     <p>These are editable starter cases. Check the project combinations against AS 5100.2 Clause 23 and the asset owner’s requirements. Use AS 5100.3 and the project geotechnical report for footing bearing resistance and serviceability limits.</p>
     <p>Use total forces for one abutment. Measure horizontal distances from the toe and heights from the base. Horizontal actions act towards the toe. The earth model assumes triangular active pressure and uniform surcharge over the full retained height.</p>
@@ -128,8 +145,8 @@ export function AbutmentStability({ permanent, superimposed, traffic, trafficOpt
         <option value="piles">Rigid cap on equal-stiffness piles</option>
       </select>
     </label>
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{geometry.map(input)}
-      {foundation === "spread" ? spread.map(input) : <>
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{geometry.map(field => input(field))}
+      {foundation === "spread" ? spread.map(field => input(field)) : <>
         <label className="grid gap-1">Pile positions from toe (m, comma separated)
           <input className="rounded border p-2" value={positions} onChange={e => setPositions(e.target.value)} />
         </label>
@@ -205,4 +222,5 @@ export function AbutmentStability({ permanent, superimposed, traffic, trafficOpt
     <p>Spread-footing sliding includes base friction only. Toe and heel pressures use a linear, compression-only contact model. Enter a geotechnical pressure limit compatible with the peak contact pressure and limit state. Pile demand assumes a rigid cap, equal axial stiffness and bending about one axis. Verify pile lateral actions, group behaviour, settlement, water and uplift, concrete strength and reinforcement separately.</p>
   </section>;
 }
+
 
