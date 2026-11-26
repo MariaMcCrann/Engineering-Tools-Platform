@@ -2,22 +2,8 @@
 
 import { useState } from "react";
 import { AbutmentStability } from "./AbutmentStability";
-
-export function peakReaction(span: number, axles: number[][]) {
-  let peak = 0;
-  for (const [, offset] of axles) {
-    // Between axle crossings, the reaction is linear in the train position.
-    for (const first of [-offset, span - offset]) {
-      const reaction = axles.reduce((sum, [load, distance]) => {
-        const x = first + distance;
-        const inside = x >= -1e-9 && x <= span + 1e-9;
-        return sum + (inside ? load * (1 - Math.max(0, Math.min(span, x)) / span) : 0);
-      }, 0);
-      peak = Math.max(peak, reaction);
-    }
-  }
-  return peak;
-}
+import { peakReaction, rectangularContactArea, sm1600Reactions } from "./bank-seat-traffic";
+import { BankSeatDiagram } from "./BankSeatDiagrams";
 
 const fields = [
   ["span", "Span between supports (m)", ""],
@@ -26,28 +12,39 @@ const fields = [
   ["beamMass", "Mass per beam (t)", ""],
   ["kerbs", "Number of additional kerb units", "0"],
   ["kerbMass", "Mass per kerb (t)", "0"],
-  ["other", "Other permanent reaction at seat (kN)", "0"],
+  ["other", "Other structural dead-load reaction at seat (kN)", "0"],
+  ["surfacing", "Superimposed dead-load reaction at seat (kN)", "0"],
+] as const;
+
+const customFields = [
   ["udl", "Concurrent full-span traffic UDL (kN/m)", "0"],
   ["axleDynamic", "Axle dynamic multiplier", "1"],
   ["udlDynamic", "UDL dynamic multiplier", "1"],
 ] as const;
 
 const optional = [
-  ["ulsG", "ULS permanent factor"],
+  ["ulsG", "ULS structural dead-load factor"],
   ["ulsQ", "ULS traffic factor"],
-  ["slsG", "SLS permanent factor"],
+  ["slsG", "SLS structural dead-load factor"],
+  ["ulsSurfacing", "ULS superimposed dead-load factor"],
+  ["slsSurfacing", "SLS superimposed dead-load factor"],
   ["slsQ", "SLS traffic factor"],
-  ["bearingG", "Permanent reaction at bearing (kN)"],
-  ["bearingQ", "Traffic reaction at bearing including dynamics (kN)"],
-  ["area", "Effective bearing area (mm²)"],
-  ["resistance", "Design bearing resistance (kN)"],
+  ["bearingG", "Structural dead-load reaction at pad (kN)"],
+  ["bearingSurfacing", "Superimposed dead-load reaction at pad (kN)"],
+  ["bearingQ", "Traffic reaction at pad including dynamics (kN)"],
+  ["padLength", "Loaded contact length along span (mm)"],
+  ["padWidth", "Loaded contact width across span (mm)"],
+  ["area", "Verified effective contact area override (mm²)"],
+  ["resistance", "Local ULS bearing resistance (kN)"],
 ] as const;
 
 export function BankSeatTool() {
   const [values, setValues] = useState<Record<string, string>>(
-    Object.fromEntries(fields.map(([key, , initial]) => [key, initial]))
+    { ...Object.fromEntries([...fields, ...customFields].map(([key, , initial]) => [key, initial])),
+      slsG: "1", slsSurfacing: "1.3", ulsSurfacing: "2" }
   );
   const [train, setTrain] = useState("");
+  const [model, setModel] = useState("sm1600");
   const number = (key: string) => values[key]?.trim() ? Number(values[key]) : NaN;
   const axles = train.split("\n").filter(line => line.trim()).map(line => line.trim().split(/[,\s]+/).map(Number));
   const validAxles = axles.length <= 100 &&
@@ -56,61 +53,141 @@ export function BankSeatTool() {
   const span = number("span");
   const width = number("width");
   const valid = fields.every(([key]) => Number.isFinite(number(key)) && number(key) >= 0) &&
-    span > 0 && width > 0 && Number.isInteger(number("beams")) && Number.isInteger(number("kerbs")) &&
-    number("axleDynamic") >= 1 && number("udlDynamic") >= 1;
+    span > 0 && width > 0 && Number.isInteger(number("beams")) && Number.isInteger(number("kerbs"));
   const permanent = (number("beams") * number("beamMass") + number("kerbs") * number("kerbMass")) * 9.8 / 2 + number("other");
-  const traffic = valid && validAxles
+  const lanes = Math.floor(number("roadWidth") / 3.2 + 1e-9);
+  const roadLoads = span > 0 && Number.isFinite(span) && Number.isSafeInteger(lanes) && lanes > 0
+    ? sm1600Reactions(span, lanes) : [];
+  const governing = roadLoads.reduce<(typeof roadLoads)[number] | undefined>(
+    (max, row) => !max || row.total > max.total ? row : max, undefined
+  );
+  const validCustom = span > 0 && Number.isFinite(span) && validAxles &&
+    customFields.every(([key]) => Number.isFinite(number(key)) && number(key) >= 0) &&
+    number("axleDynamic") >= 1 && number("udlDynamic") >= 1;
+  const customTraffic = validCustom
     ? peakReaction(span, axles) * number("axleDynamic") + number("udl") * span / 2 * number("udlDynamic")
     : NaN;
-  const combine = (g: number, q: number, gf: string, qf: string) =>
-    [g, q, number(gf), number(qf)].every(value => Number.isFinite(value) && value >= 0)
-      ? g * number(gf) + q * number(qf) : NaN;
-  const bearing = combine(number("bearingG"), number("bearingQ"), "ulsG", "ulsQ");
+  const traffic = model === "sm1600" ? governing?.total ?? NaN : customTraffic;
+  const factor = (key: string) => {
+    if (model === "sm1600" && !values[key]?.trim()) {
+      if (key === "ulsQ") return 1.8;
+      if (key === "slsQ") return 1;
+    }
+    return number(key);
+  };
+  const format = (value: number, unit = "") =>
+    Number.isFinite(value) ? value.toFixed(2) + (unit ? " " + unit : "") : "—";
+  const factored = (reaction: number, key: string) => {
+    const multiplier = factor(key);
+    return reaction === 0 ? 0 : Number.isFinite(reaction) && reaction > 0 &&
+      Number.isFinite(multiplier) && multiplier >= 0 ? reaction * multiplier : NaN;
+  };
+  const surfacing = number("surfacing");
+  const deckCombination = (gf: string, qf: string, sf: string) => valid
+    ? factored(permanent, gf) + factored(traffic, qf) + factored(surfacing, sf)
+    : NaN;
+  const area = values.area?.trim() ? number("area") : rectangularContactArea(number("padLength"), number("padWidth"));
+  const bearing = factored(number("bearingG"), "ulsG") + factored(number("bearingQ"), "ulsQ")
+    + (values.bearingSurfacing?.trim() ? factored(number("bearingSurfacing"), "ulsSurfacing") : 0);
   const results: [string, number, string][] = [
-    ["Permanent deck reaction", valid ? permanent : NaN, "kN"],
-    ["Equivalent permanent line load across seat", valid ? permanent / width : NaN, "kN/m"],
+    ["Permanent deck reaction", valid ? permanent + surfacing : NaN, "kN"],
+    ["Equivalent permanent line load across seat", valid ? (permanent + surfacing) / width : NaN, "kN/m"],
     ["Peak traffic reaction", traffic, "kN"],
-    ["ULS vertical deck reaction", combine(permanent, traffic, "ulsG", "ulsQ"), "kN"],
-    ["SLS vertical deck reaction", combine(permanent, traffic, "slsG", "slsQ"), "kN"],
+    ["ULS vertical deck reaction", deckCombination("ulsG", "ulsQ", "ulsSurfacing"), "kN"],
+    ["SLS vertical deck reaction", deckCombination("slsG", "slsQ", "slsSurfacing"), "kN"],
+  ];
+  const localResults: [string, number, string][] = [
+    ["Effective contact area", area > 0 ? area : NaN, "mm²"],
     ["Local ULS bearing reaction", bearing, "kN"],
-    ["Average ULS contact pressure", number("area") > 0 ? 1000 * bearing / number("area") : NaN, "MPa"],
+    ["Average ULS contact pressure", area > 0 ? 1000 * bearing / area : NaN, "MPa"],
     ["Vertical bearing utilisation", number("resistance") > 0 ? 100 * bearing / number("resistance") : NaN, "%"],
   ];
   const input = ([key, label]: readonly [string, string, ...string[]]) => (
     <label key={key} className="grid gap-1">
       {label}
       <input className="rounded border border-slate-400 px-3 py-2" type="number" min="0" step="any"
+        placeholder={key === "ulsQ" || key === "slsQ" ? format(factor(key)) : undefined}
         value={values[key] ?? ""} onChange={event => setValues({ ...values, [key]: event.target.value })} />
     </label>
   );
+  const resultList = (items: [string, number, string][]) => (
+    <dl aria-live="polite" className="grid gap-3 rounded border border-slate-400 p-4 sm:grid-cols-3">
+      {items.map(([label, value, unit]) => <div key={label}><dt>{label}</dt><dd className="font-semibold">{format(value, unit)}</dd></div>)}
+    </dl>
+  );
+
   return (
-    <div className="grid max-w-5xl gap-6 p-6">
-      <p>Calculate vertical reactions for one simply supported end span. Beam and kerb self-weight is assumed symmetric.</p>
-      <fieldset className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <legend className="mb-3 font-semibold">Span and actions</legend>
-        {fields.map(input)}
-      </fieldset>
-      <label className="grid gap-1">
-        Axle train (one load in kN and offset in m per line)
-        <textarea className="rounded border border-slate-400 p-3 font-mono" rows={4}
-          value={train} onChange={event => setTrain(event.target.value)} placeholder="160, 0" />
-      </label>
-      {!validAxles && <p role="alert">Enter positive axle loads and non-negative offsets, starting at zero. Maximum 100 axles.</p>}
-      <p>Use one approved traffic case at a time. The solver allows partial axle trains on the span and assumes the entered UDL covers the entire span. Verify placement and concurrency against the adopted load model.</p>
-      <fieldset className="grid gap-4 sm:grid-cols-2">
-        <legend className="mb-3 font-semibold">Load factors and local bearing</legend>
-        {optional.map(input)}
-      </fieldset>
-      <p>Enter the governing local bearing actions from the transverse load analysis. Use project-approved factors and dynamic allowances.</p>
-      <dl aria-live="polite" className="grid gap-3 rounded border border-slate-400 p-4 sm:grid-cols-2">
-        {results.map(([label, value, unit]) => (
-          <div key={label}><dt>{label}</dt><dd className="font-semibold">
-            {Number.isFinite(value) ? value.toFixed(2) + " " + unit : "Enter inputs"}
-          </dd></div>
-        ))}
-      </dl>
-      <AbutmentStability permanent={valid ? permanent : NaN} traffic={traffic} />
-      <p>Seat flexure, shear, edge effects and restraint design require the actual bearing and support layout.</p>
+    <div className="grid max-w-5xl gap-8 p-6">
+      <nav aria-label="Bridge bank seat checks" className="flex flex-wrap gap-x-5 gap-y-2 underline">
+        <a href="#deck-actions">Deck reactions</a>
+        <a href="#local-bearing">Local bearing</a>
+        <a href="#foundation-checks">Abutment and foundations</a>
+      </nav>
+      <section className="grid gap-4" aria-labelledby="deck-actions">
+        <h2 id="deck-actions" className="text-xl font-semibold">Deck reactions at the bank seat</h2>
+        <p>Calculate the total vertical reaction at one end of a simply supported span. Beam and kerb weights are assumed symmetric.</p>
+        <BankSeatDiagram view="span" />
+        <fieldset className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <legend className="mb-3 font-semibold">Span geometry and permanent loads</legend>
+          {fields.map(input)}
+        </fieldset>
+        <label className="grid max-w-sm gap-1">Vehicle load model
+          <select className="rounded border border-slate-400 p-2" value={model} onChange={event => setModel(event.target.value)}>
+            <option value="sm1600">AS 5100.2 SM1600 design traffic</option>
+            <option value="custom">Project-specific axle train</option>
+          </select>
+        </label>
+        {model === "sm1600" ? <>
+          <div className="max-w-sm">{input(["roadWidth", "Clear road width between external barriers (m)"])}</div>
+          <p>AS 5100.2 Clauses 7.5–7.6 determine the number of 3.2 m design lanes and their accompanying factors. The road width is measured independently of the loaded seat width.</p>
+          {governing ? <details open className="rounded border border-slate-400 p-3">
+            <summary className="cursor-pointer font-semibold">SM1600 vehicle load breakdown</summary>
+            <div className="overflow-x-auto">
+              <table className="mt-3 w-full min-w-[40rem] text-left">
+                <thead className="bg-slate-100 text-slate-900"><tr><th scope="col" className="p-2">Seat reaction component</th>{roadLoads.map(row => <th key={row.name} scope="col" className="p-2">{row.name}</th>)}</tr></thead>
+                <tbody>
+                  {([
+                    ["Axles, one lane", "axleReaction", "kN"],
+                    ["Full-span UDL, one lane", "udlReaction", "kN"],
+                    ["Dynamic load allowance α", "alpha", ""],
+                    ["Reaction including dynamics, one lane", "laneReaction", "kN"],
+                    ["Total reaction with accompanying lane factors", "total", "kN"],
+                  ] as const).map(([label, key, unit]) => <tr key={key} className="border-t border-slate-200">
+                    <th scope="row" className="p-2 font-normal">{label}</th>
+                    {roadLoads.map(row => <td key={row.name} className="p-2">{format(row[key], unit)}</td>)}
+                  </tr>)}
+                </tbody>
+              </table>
+            </div>
+            <p className="mt-2 rounded bg-emerald-50 p-2 font-semibold text-emerald-950">Governing total seat reaction over {lanes} design {lanes === 1 ? "lane" : "lanes"}: {governing.name}, {format(traffic, "kN")} before load factors.</p>
+          </details> : <p>Enter a positive span and a clear road width sufficient for at least one standard design lane. Use the project-specific model for an approved alternative.</p>}
+          <p>The calculation moves axle groups along the span in both directions and applies each model’s UDL and above-ground dynamic allowance from Table 7.7.2. Use transverse load analysis for individual bearings and local wheel effects.</p>
+        </> : <>
+          <fieldset className="grid gap-4 sm:grid-cols-3"><legend className="mb-3 font-semibold">Project-specific traffic inputs</legend>{customFields.map(input)}</fieldset>
+          <label className="grid gap-1">Axle train (load in kN and offset in m, one axle per line)
+            <textarea className="rounded border border-slate-400 p-3 font-mono" rows={4}
+              value={train} onChange={event => setTrain(event.target.value)} placeholder="160, 0" />
+          </label>
+          {!validAxles && <p role="alert">Enter positive axle loads and non-negative offsets, starting at zero. Maximum 100 axles.</p>}
+          <p>Enter one approved concurrent case at a time. The solver allows partial axle trains on the span and applies the UDL over the full span.</p>
+        </>}
+        <fieldset className="grid gap-4 sm:grid-cols-3">
+          <legend className="mb-3 font-semibold">Load factors for vertical deck reactions</legend>
+          {optional.slice(0, 6).map(input)}
+        </fieldset>
+        <p>SLS means serviceability limit state. Use AS 5100.2 Table 6.2 for structural dead load (1.0 at SLS), Table 6.3 for superimposed dead load (typically 1.3 at SLS), and Table 7.10(A) for SM1600 traffic (1.0 at SLS and 1.8 at ULS). Select the ULS structural dead-load factor for the action and material. Enter project-specific traffic factors for a custom vehicle. Include surfacing and similar loads in the separate superimposed dead-load field.</p>
+        {resultList(results)}
+      </section>
+      <section className="grid gap-4 border-t border-slate-400 pt-5" aria-labelledby="local-bearing">
+        <h2 id="local-bearing" className="text-xl font-semibold">Local bearing at the seat</h2>
+        <BankSeatDiagram view="pad" />
+        <p>Enter the reactions at one pad or contact patch from the transverse load analysis. The area uses the actual loaded contact dimensions and assumes full rectangular contact. For partial contact, eccentric loading or a bearing with a specified effective area, enter a verified area.</p>
+        <div className="grid gap-4 sm:grid-cols-3">{optional.slice(6).map(input)}</div>
+        <p>Local ULS bearing resistance is the design force capacity in kN of the governing pad or supporting concrete check. Refer to AS 5100.4 for bridge bearings and AS 5100.5 for supporting concrete. Use the footing checks below for soil bearing pressure in kPa.</p>
+        {resultList(localResults)}
+      </section>
+      <AbutmentStability permanent={valid ? permanent : NaN} superimposed={valid ? surfacing : NaN}
+        traffic={traffic} trafficOptions={model === "sm1600" ? roadLoads.map(row => ({ name: row.name, value: row.total })) : []} />
     </div>
   );
 }
