@@ -6,6 +6,7 @@ import { createPortal } from "react-dom";
 const esc=(s:string)=>s.replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]||c));
 const PAGE_URL=()=>window.location.href.split("#")[0];
 const STRUCTURAL_TITLES=new Set(["Headwall Concrete","Base Slab Concrete"]);
+const BRIDGE_TITLES=new Set(["Bridge Bank Seat","Abutment and Foundations","Blinding Slab"]);
 
 function reportData(){
   const title=document.querySelector("h1")?.textContent?.trim()||"Engineering Calculation";
@@ -87,6 +88,6 @@ export default function ReportExportTools(){
   },[]);
   const updateProject=(key:keyof typeof project,value:string)=>{const next={...project,[key]:value};setProject(next);try{sessionStorage.setItem("engineering-project-details",JSON.stringify(next))}catch{}};
   const [mode,setMode]=useState<"none"|"pdf"|"both">("none");
-  useEffect(()=>{const check=()=>{const title=document.querySelector("h1")?.textContent?.trim()||"";const structural=STRUCTURAL_TITLES.has(title);const csv=[...document.querySelectorAll("button")].filter(b=>/export.*csv/i.test(b.textContent||"")) as HTMLElement[];csv.forEach(b=>{if(!b.hasAttribute("data-keep-csv"))b.style.display="none"});setMode(structural?"pdf":csv.length?"both":"none")};check();const o=new MutationObserver(check);o.observe(document.body,{subtree:true,childList:true});return()=>o.disconnect()},[]);
+  useEffect(()=>{const check=()=>{const title=document.querySelector("h1")?.textContent?.trim()||"";const structural=STRUCTURAL_TITLES.has(title);const csv=[...document.querySelectorAll("button")].filter(b=>/export.*csv/i.test(b.textContent||"")) as HTMLElement[];csv.forEach(b=>{if(!b.hasAttribute("data-keep-csv"))b.style.display="none"});setMode(structural?"pdf":csv.length||BRIDGE_TITLES.has(title)?"both":"none")};check();const o=new MutationObserver(check);o.observe(document.body,{subtree:true,childList:true});return()=>o.disconnect()},[]);
   return <>{target&&createPortal(<section className="project-details" aria-label="Optional project details"><div className="project-details-title">Project details <small>Optional</small></div><div className="project-details-fields">{([{key:"name",label:"Project name"},{key:"number",label:"Project number"},{key:"designer",label:"Designer"}] as const).map(field=><label key={field.key} htmlFor={`report-project-${field.key}`}><span>{field.label}</span><input id={`report-project-${field.key}`} data-report-label={field.label} type="text" value={project[field.key]} onChange={event=>updateProject(field.key,event.target.value)}/></label>)}</div></section>,target)}{mode!=="none"&&<div className="report-export-tools"><button onClick={exportPdf}>↓ Export PDF</button>{mode==="both"&&<button onClick={exportExcel}>↓ Export Excel</button>}</div>}</>;
 }

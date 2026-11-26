@@ -3,224 +3,211 @@
 import { useState, useSyncExternalStore } from "react";
 import { BankSeatDiagram } from "./BankSeatDiagrams";
 import { parseSeatTransfer, readSeatTransfer } from "./bank-seat-transfer";
+import { DEFAULT_CASES, actions, brakingForce, contact, exampleSeatReactions, pileActions, pileResistance, type CaseFactors } from "./bridge-calcs";
+import { Card, Check, Field, Metric, ResultHero, Select, TitleRow, fmt } from "./BridgeUi";
 
-type Force = { vertical: number; horizontal: number; arm: number; height: number };
-type Case = {
-  name: string; limit: string; traffic: string; useSpan: boolean; spanModel: string; surfacingFactor: string;
-  g: string; concreteFactor: string; q: string; earth: string; surcharge: string; braking: string; extra: string;
+export { actions, contact, pileActions } from "./bridge-calcs";
+
+const factorRows: [keyof CaseFactors, string][] = [
+  ["g", "Deck dead load"], ["sdl", "Deck superimposed dead load"], ["q", "Deck traffic"], ["concrete", "Abutment self weight"],
+  ["earth", "Earth pressure"], ["surcharge", "Traffic surcharge on approach"], ["braking", "Braking"],
+];
+
+const defaults: Record<string, string> = {
+  length: "5.1", width: "0.7", height: "1.45", density: "20", ka: "0.33", bearing: "0.35",
+  volume: "4.61", concrete: "25", centroid: "0.35", brakeHeight: "1.45", surchargeKpa: "10",
+  friction: "0.45", slsLimit: "200", ultimate: "200", phiG: "0.5",
+  positions: "0.15, 0.55", perRow: "3", pileD: "0.3", pileL: "9", qb: "200", fs: "20", pilePhi: "0.5", compression: "", uplift: "",
 };
-const initialCases: Case[] = [
-  { name: "Permanent actions and retained soil", limit: "SLS", traffic: "0", useSpan: false, spanModel: "", surfacingFactor: "1.3", g: "1", concreteFactor: "1", q: "0", earth: "", surcharge: "0", braking: "0", extra: "0" },
-  { name: "Traffic on approach behind abutment", limit: "ULS", traffic: "0", useSpan: false, spanModel: "", surfacingFactor: "", g: "", concreteFactor: "", q: "0", earth: "", surcharge: "", braking: "", extra: "0" },
-  { name: "Traffic on bridge deck", limit: "ULS", traffic: "", useSpan: false, spanModel: "M1600", surfacingFactor: "", g: "", concreteFactor: "", q: "", earth: "", surcharge: "0", braking: "", extra: "0" },
-];
 
-export function actions(forces: Force[]) {
-  let normal = 0, horizontal = 0, restoring = 0, overturning = 0;
-  for (const force of forces) {
-    normal += force.vertical;
-    horizontal += force.horizontal;
-    for (const moment of [force.vertical * force.arm, -force.horizontal * force.height]) {
-      restoring += Math.max(moment, 0);
-      overturning += Math.max(-moment, 0);
-    }
-  }
-  return { normal, horizontal, restoring, overturning, moment: restoring - overturning };
-}
-
-export function contact(normal: number, moment: number, width: number, length: number) {
-  if (normal <= 0 || width <= 0 || length <= 0) return null;
-  const x = moment / normal;
-  if (x <= 0 || x >= width) return null;
-  const eccentricity = x - width / 2;
-  const middleThird = Math.abs(eccentricity) <= width / 6;
-  const compression = middleThird ? width : 3 * Math.min(x, width - x);
-  const average = normal / (length * width);
-  const delta = 6 * average * eccentricity / width;
-  const peak = 2 * normal / (length * compression);
-  return {
-    x, eccentricity, compression,
-    toe: middleThird ? Math.max(0, average - delta) : eccentricity < 0 ? peak : 0,
-    heel: middleThird ? Math.max(0, average + delta) : eccentricity > 0 ? peak : 0,
-  };
-}
-
-export function pileActions(positions: number[], normal: number, moment: number) {
-  const centre = positions.reduce((sum, x) => sum + x, 0) / positions.length;
-  const squared = positions.reduce((sum, x) => sum + (x - centre) ** 2, 0);
-  const residual = moment - normal * centre;
-  if (squared === 0 && Math.abs(residual) > 1e-8) return null;
-  return positions.map(x => normal / positions.length + (squared ? residual * (x - centre) / squared : 0));
-}
-
-const caseGuidance = [
-  "Deck and abutment self-weight plus retained soil pressure. Use this service case to review footing contact and service pressures without vehicle loading.",
-  "Vehicles on the retained approach can increase lateral pressure through surcharge. Include only braking and deck traffic actions justified by the load path and concurrency.",
-  "Vehicles on the deck increase the vertical seat reaction. For a road braking combination, use the concurrent M1600 reaction and design braking force per AS 5100.2 Clauses 7.8.2 and 7.10.",
-];
-
-const geometry = [
-  ["length", "Abutment / footing length across bridge (m)"],
-  ["height", "Retained height above base (m)"],
-  ["density", "Backfill unit weight (kN/m³)"],
-  ["ka", "Active earth pressure coefficient"],
-  ["bearing", "Deck reaction location from toe (m)"],
-  ["volume", "Total concrete volume (m³)"],
-  ["concrete", "Concrete unit weight (kN/m³)"],
-  ["centroid", "Concrete centroid from toe (m)"],
-  ["brakeHeight", "Braking force height above base (m)"],
-  ["extraHeight", "Additional horizontal force height (m)"],
-] as const;
-
-const spread = [
-  ["width", "Base width in direction of traffic (m)"],
-  ["friction", "Design base friction coefficient"],
-  ["slsPressure", "SLS contact pressure limit (kPa)"],
-  ["ulsPressure", "ULS contact pressure limit (kPa)"],
-] as const;
-
-const caseFields = [
-  ["g", "Permanent deck action multiplier"],
-  ["concreteFactor", "Abutment self-weight multiplier"],
-  ["q", "Traffic reaction multiplier"],
-  ["earth", "Earth pressure multiplier"],
-  ["surcharge", "Design uniform surcharge (kPa)"],
-  ["braking", "Design braking force (kN)"],
-  ["extra", "Design additional horizontal force (kN)"],
-] as const;
-
-const subscribeToSeatTransfer = () => () => {};
-const emptySeatTransfer = () => "";
+const subscribe = () => () => {};
+const empty = () => "";
 
 export function AbutmentStability() {
-  const storedTransfer = useSyncExternalStore(subscribeToSeatTransfer, readSeatTransfer, emptySeatTransfer);
-  const linked = parseSeatTransfer(storedTransfer);
+  const linked = parseSeatTransfer(useSyncExternalStore(subscribe, readSeatTransfer, empty));
+  const example = exampleSeatReactions();
+  const source = linked ?? example;
+  const exampleBraking = brakingForce(source.span ?? NaN, source.lanes ?? NaN)?.design ?? 0;
+  const [v, setV] = useState<Record<string, string>>(() => ({
+    ...defaults,
+    deckPermanent: fmt(source.permanent ?? 0, 1).replace(/,/g, ""),
+    deckSuperimposed: fmt(source.superimposed ?? 0, 1).replace(/,/g, ""),
+    deckTraffic: fmt(source.traffic ?? 0, 1).replace(/,/g, ""),
+    braking: fmt(linked?.braking ?? exampleBraking, 1).replace(/,/g, ""),
+  }));
   const [foundation, setFoundation] = useState("spread");
-  const [inputs, setInputs] = useState<Record<string, string>>({});
-  const [cases, setCases] = useState(initialCases.map((item, i) => ({ ...item, template: i })));
-  const [positions, setPositions] = useState("");
-  const read = (raw?: string) => raw?.trim() ? Number(raw) : NaN;
-  const value = (key: string) => read(inputs[key]);
-  const deckAction = (key: string, transferred?: number | null) =>
-    inputs[key] === undefined ? transferred ?? NaN : value(key);
-  const permanent = deckAction("deckPermanent", linked?.permanent);
-  const superimposed = deckAction("deckSuperimposed", linked?.superimposed ?? 0);
-  const traffic = deckAction("deckTraffic", linked?.traffic);
-  const trafficOptions = linked?.trafficOptions ?? [];
-  const nonnegative = (items: number[]) => items.every(item => Number.isFinite(item) && item >= 0);
-  const hasGeometry = nonnegative(geometry.map(([key]) => value(key))) &&
-    value("length") > 0 && value("concrete") > 0 && (value("height") === 0 || value("density") > 0 && value("ka") > 0);
-  const width = value("width");
-  const height = value("height");
-  const length = value("length");
-  const weight = value("volume") * value("concrete");
-  const earth = 0.5 * value("ka") * value("density") * height ** 2 * length;
-  const piles = positions.trim() ? positions.trim().split(/[,\s]+/).map(Number) : [];
-  const validSupport = foundation === "spread"
-    ? width > 0 && value("bearing") <= width && value("centroid") <= width
-    : piles.length > 0 && piles.length <= 100 && nonnegative(piles);
-  const display = (n: number) => Number.isFinite(n) ? n.toFixed(2) : "—";
-  const input = ([key, label]: readonly [string, string], initial?: number) => <label key={key} className="grid gap-1">{label}
-    <input className="rounded border border-slate-400 px-3 py-2" type="number" min="0" step="any"
-      value={inputs[key] ?? initial ?? ""} onChange={e => setInputs({ ...inputs, [key]: e.target.value })} /></label>;
-  const change = (index: number, patch: Partial<Case>) =>
-    setCases(cases.map((item, i) => i === index ? { ...item, ...patch } : item));
+  const [cases, setCases] = useState(() => DEFAULT_CASES.map(c => ({ ...c, factors: Object.fromEntries(Object.entries(c.factors).map(([k, x]) => [k, String(x)])) as Record<keyof CaseFactors, string> })));
+  const n = (key: string) => v[key]?.trim() ? Number(v[key]) : NaN;
+  const set = (key: string) => (value: string) => setV({ ...v, [key]: value });
+  const field = (key: string, label: string, unit?: string, hint?: string) =>
+    <Field key={key} label={label} unit={unit} hint={hint} value={v[key] ?? ""} onChange={set(key)} />;
+  const setFactor = (i: number, key: keyof CaseFactors, value: string) =>
+    setCases(cases.map((c, j) => j === i ? { ...c, factors: { ...c.factors, [key]: value } } : c));
 
-  return <section aria-labelledby="foundation-checks" className="grid gap-5 border-t border-slate-400 pt-5">
-    <h2 id="foundation-checks" className="text-xl font-semibold">Abutment and foundation checks</h2>
-    <fieldset className="grid gap-3 rounded border border-slate-400 p-4 sm:grid-cols-3">
-      <legend className="px-1 font-semibold">Nominal deck reactions for one seat</legend>
-      {input(["deckPermanent", "Structural dead-load reaction (kN)"], linked?.permanent ?? undefined)}
-      {input(["deckSuperimposed", "Superimposed dead-load reaction (kN)"], linked?.superimposed ?? 0)}
-      {input(["deckTraffic", "Peak traffic reaction including dynamics (kN)"], linked?.traffic ?? undefined)}
-    </fieldset>
-    <p>{linked ? "Values available from the bank seat calculator are prefilled. You can edit the totals for this abutment."
-      : "Enter the deck reactions for this abutment, or open these checks from Bridge Bank Seat to transfer calculated values."}</p>
-    <BankSeatDiagram view="abutment" />
-    <p>These are editable starter cases. Check the project combinations against AS 5100.2 Clause 23 and the asset owner’s requirements. Use AS 5100.3 and the project geotechnical report for footing bearing resistance and serviceability limits.</p>
-    <p>Use total forces for one abutment. Measure horizontal distances from the toe and heights from the base. Horizontal actions act towards the toe. The earth model assumes triangular active pressure and uniform surcharge over the full retained height.</p>
-    <label className="grid max-w-sm gap-1">Foundation
-      <select value={foundation} onChange={e => setFoundation(e.target.value)} className="rounded border p-2">
-        <option value="spread">Mass abutment / spread footing</option>
-        <option value="piles">Rigid cap on equal-stiffness piles</option>
-      </select>
-    </label>
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{geometry.map(field => input(field))}
-      {foundation === "spread" ? spread.map(field => input(field)) : <>
-        <label className="grid gap-1">Pile positions from toe (m, comma separated)
-          <input className="rounded border p-2" value={positions} onChange={e => setPositions(e.target.value)} />
-        </label>
-        {input(["compression", "ULS compression resistance per pile (kN)"])}
-        {input(["tension", "ULS uplift resistance per pile (kN)"])}
-      </>}
-    </div>
-    <p>Concrete self-weight {display(weight)} kN · Unfactored active earth thrust {display(earth)} kN. Enter zero for unused actions and factors. Enter case-specific braking and surcharge as design values with any applicable factors already included.</p>
-    {cases.map((item, i) => {
-      const selectedTraffic = trafficOptions.length && item.spanModel
-        ? trafficOptions.find(row => row.name === item.spanModel)?.value ?? NaN : traffic;
-      const q = item.useSpan ? selectedTraffic : read(item.traffic);
-      const surfacingFactor = superimposed === 0 ? 0 : read(item.surfacingFactor);
-      const loaded = hasGeometry && validSupport && nonnegative([permanent, superimposed, surfacingFactor, q, ...caseFields.map(([key]) => read(item[key]))]);
-      const a = loaded ? actions([
-        { vertical: permanent * read(item.g) + superimposed * surfacingFactor + q * read(item.q), horizontal: 0, arm: value("bearing"), height: 0 },
-        { vertical: weight * read(item.concreteFactor), horizontal: 0, arm: value("centroid"), height: 0 },
-        { vertical: 0, horizontal: earth * read(item.earth), arm: 0, height: height / 3 },
-        { vertical: 0, horizontal: value("ka") * read(item.surcharge) * height * length, arm: 0, height: height / 2 },
-        { vertical: 0, horizontal: read(item.braking), arm: 0, height: value("brakeHeight") },
-        { vertical: 0, horizontal: read(item.extra), arm: 0, height: value("extraHeight") },
-      ]) : null;
-      const c = a && foundation === "spread" ? contact(a.normal, a.moment, width, length) : null;
-      const p = a && foundation === "piles" ? pileActions(piles, a.normal, a.moment) : null;
-      const pressureLimit = value(item.limit === "ULS" ? "ulsPressure" : "slsPressure");
-      return <fieldset key={i} className="grid gap-3 rounded border border-slate-400 p-4">
-        <legend className="px-1 font-semibold">{item.name || "Load case"}</legend>
-        {caseGuidance[item.template] && <p>{caseGuidance[item.template]}</p>}
-        {item.template >= 0 && <BankSeatDiagram view="abutment" loadCase={item.template} />}
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <label className="grid gap-1">Case name<input className="rounded border p-2" value={item.name} onChange={e => change(i, { name: e.target.value })} /></label>
-          <label className="grid gap-1">Limit state<select className="rounded border p-2" value={item.limit} onChange={e => change(i, { limit: e.target.value })}><option>SLS</option><option>ULS</option></select></label>
-          <label className="grid gap-1">Concurrent deck traffic reaction (kN, incl. dynamics)
-            <input className="rounded border p-2" type="number" step="any" min="0" disabled={item.useSpan} value={item.useSpan ? Number.isFinite(selectedTraffic) ? selectedTraffic.toFixed(2) : "" : item.traffic} onChange={e => change(i, { traffic: e.target.value })} />
-          </label>
-          <label className="grid gap-1">Superimposed dead-load multiplier
-            <input className="rounded border p-2" type="number" step="any" min="0" disabled={superimposed === 0}
-              value={item.surfacingFactor} onChange={e => change(i, { surfacingFactor: e.target.value })} />
-          </label>
-          {caseFields.map(([key, label]) => <label key={key} className="grid gap-1">{label}<input className="rounded border p-2" type="number" step="any" min="0" value={item[key]} onChange={e => change(i, { [key]: e.target.value })} /></label>)}
+  const P = n("deckPermanent"), S = n("deckSuperimposed"), Q = n("deckTraffic"), B = n("braking");
+  const L = n("length"), W = n("width"), H = n("height");
+  const selfWeight = n("volume") * n("concrete");
+  const earth = 0.5 * n("ka") * n("density") * H ** 2 * L;
+  const surcharge = n("ka") * n("surchargeKpa") * H * L;
+  const inputsOk = [P, S, Q, B, L, H, n("density"), n("ka"), n("bearing"), n("volume"), n("concrete"), n("centroid"), n("brakeHeight"), n("surchargeKpa")]
+    .every(x => Number.isFinite(x) && x >= 0) && L > 0;
+  const ulsLimit = n("ultimate") * n("phiG");
+
+  const positions = v.positions.trim() ? v.positions.trim().split(/[,\s]+/).map(Number) : [];
+  const perRow = n("perRow");
+  const pileCap = pileResistance(n("pileD"), n("pileL"), n("qb"), n("fs"), n("pilePhi"));
+  const compressionCap = v.compression.trim() ? n("compression") : pileCap?.compression ?? NaN;
+  const upliftCap = v.uplift.trim() ? n("uplift") : pileCap?.uplift ?? NaN;
+  const pilesOk = positions.length > 0 && positions.length <= 50 && positions.every(x => Number.isFinite(x) && x >= 0) && Number.isInteger(perRow) && perRow > 0;
+
+  const results = cases.map(c => {
+    const f = Object.fromEntries(Object.entries(c.factors).map(([k, x]) => [k, x.trim() ? Number(x) : NaN])) as CaseFactors;
+    if (!inputsOk || !Object.values(f).every(x => Number.isFinite(x) && x >= 0)) return { c, a: null };
+    const a = actions([
+      { vertical: P * f.g + S * f.sdl + Q * f.q, horizontal: 0, arm: n("bearing"), height: 0 },
+      { vertical: selfWeight * f.concrete, horizontal: 0, arm: n("centroid"), height: 0 },
+      { vertical: 0, horizontal: earth * f.earth, arm: 0, height: H / 3 },
+      { vertical: 0, horizontal: surcharge * f.surcharge, arm: 0, height: H / 2 },
+      { vertical: 0, horizontal: B * f.braking, arm: 0, height: n("brakeHeight") },
+    ]);
+    const uls = c.limit === "ULS";
+    const limit = uls ? ulsLimit : n("slsLimit");
+    if (foundation === "spread") {
+      const p = W > 0 ? contact(a.normal, a.moment, W, L) : null;
+      const peak = p ? Math.max(p.toe, p.heel) : NaN;
+      return { c, a, p, peak, limit, bearing: p && limit > 0 ? peak / limit : p ? NaN : Infinity,
+        overturning: a.overturning > 0 ? a.restoring / a.overturning : Infinity,
+        sliding: a.horizontal > 0 ? a.normal * n("friction") / a.horizontal : Infinity };
+    }
+    const row = pilesOk ? pileActions(positions, a.normal, a.moment) : null;
+    const forces = row?.map(x => x / perRow) ?? null;
+    const maxC = forces ? Math.max(...forces) : NaN, minC = forces ? Math.min(...forces) : NaN;
+    return { c, a, forces, maxC, minC, bearing: forces ? Math.max(maxC > 0 ? maxC / compressionCap : 0, minC < 0 ? -minC / upliftCap : 0) : Infinity };
+  });
+
+  const uls = results.filter(r => r.c.limit === "ULS" && r.a);
+  const worst = (key: "bearing" | "overturning" | "sliding", high: boolean) => uls.reduce<{ value: number; name: string } | null>((best, r) => {
+    const value = (r as Record<string, unknown>)[key] as number;
+    if (value === undefined || Number.isNaN(value)) return best;
+    return !best || (high ? value > best.value : value < best.value) ? { value, name: r.c.name } : best;
+  }, null);
+  const bearingWorst = worst("bearing", true);
+  const overturnWorst = foundation === "spread" ? worst("overturning", false) : null;
+  const slidingWorst = foundation === "spread" ? worst("sliding", false) : null;
+  const allPass = !!bearingWorst && bearingWorst.value <= 1 && (!overturnWorst || overturnWorst.value >= 1) && (!slidingWorst || slidingWorst.value >= 1);
+  const ratio = (x: number) => x === Infinity ? "n/a" : fmt(x, 2);
+  const pct = (x: number) => x === Infinity ? "—" : `${fmt(100 * x, 0)}%`;
+
+  return <div className="content calc-content bridge-tool">
+    <TitleRow eyebrow="BRIDGE SUBSTRUCTURE · AS 5100.2 / AS 5100.3" title="Abutment and Foundations"
+      subtitle="Bearing, overturning and sliding checks for a bridge abutment on a spread footing or piles, using AS 5100.2 load combinations." />
+    <div className="warning"><div>i</div><p>{linked ? "Deck reactions came from the Bridge Bank Seat tool. You can still edit them."
+      : <>Example values are loaded. Start from <a href="/bank-seat">Bridge Bank Seat</a> to bring your deck reactions across, or type them in below.</>}</p></div>
+    <div className="calc-layout"><div>
+      <Card step="1" title="Deck actions at this abutment (unfactored)">
+        <div className="calc-fields">
+          {field("deckPermanent", "Deck dead load reaction", "kN")}
+          {field("deckSuperimposed", "Superimposed dead load reaction", "kN")}
+          {field("deckTraffic", "Traffic reaction incl. dynamics", "kN", "SM1600 governing reaction")}
+          {field("braking", "Braking force at this abutment", "kN", "Cl 7.8.2. Reduce if shared by bearings")}
         </div>
-        <label className="flex gap-2"><input type="checkbox" checked={item.useSpan} onChange={e => change(i, { useSpan: e.target.checked })} />Use calculated seat traffic reaction if applicable at the foundation</label>
-        {item.useSpan && trafficOptions.length > 0 && <label className="grid max-w-sm gap-1">Concurrent vehicle model
-          <select className="rounded border p-2" value={item.spanModel} onChange={e => change(i, { spanModel: e.target.value })}>
-            <option value="">Peak vertical reaction across all models</option>
-            {trafficOptions.map(row => <option key={row.name}>{row.name}</option>)}
-          </select>
-        </label>}
-        {item.useSpan && <p>Linked traffic uses the above-ground dynamic allowance and peak seat reaction. Enter a case-specific reaction manually where foundation depth, concurrent placement or load distribution requires a different value.</p>}
-        {a ? <div className="grid gap-1">
-          <p>Normal force {display(a.normal)} kN · Horizontal demand {display(a.horizontal)} kN</p>
-          <p>Restoring moment {display(a.restoring)} kNm · Overturning moment {display(a.overturning)} kNm · Net moment about toe {display(a.moment)} kNm</p>
-          {foundation === "spread" && <>
-            <p>Overturning resistance / demand {a.overturning > 0 ? display(a.restoring / a.overturning) : "—"} · Sliding resistance / demand {a.horizontal > 0 && nonnegative([value("friction")]) ? display(a.normal * value("friction") / a.horizontal) : "—"}</p>
-            {c ? <>
-              <p>Resultant from toe {display(c.x)} m · Eccentricity towards heel {display(c.eccentricity)} m · Contact width {display(c.compression)} m</p>
-              <p>Toe pressure {display(c.toe)} kPa · Heel pressure {display(c.heel)} kPa · Peak pressure / entered limit {pressureLimit > 0 ? display(Math.max(c.toe, c.heel) / pressureLimit) : "—"}</p>
-              {c.compression < width && <p>Partial contact. Review the applicable eccentricity and bearing resistance criteria.</p>}
-            </> : <p>Resultant outside the footing or at its edge, or no compression. No contact-pressure solution.</p>}
+      </Card>
+
+      <Card step="2" title="Abutment geometry and backfill">
+        <BankSeatDiagram view="abutment" />
+        <div className="calc-fields">
+          {field("length", "Abutment length across bridge", "m")}
+          {field("height", "Retained height H", "m", "Top of fill to underside of footing")}
+          {field("bearing", "Deck bearing distance from toe", "m")}
+          {field("volume", "Abutment concrete volume", "m³")}
+          {field("concrete", "Concrete unit weight", "kN/m³", "AS 5100.2 Cl 5: 25 for reinforced")}
+          {field("centroid", "Concrete centroid from toe", "m")}
+          {field("density", "Backfill unit weight", "kN/m³")}
+          {field("ka", "Active pressure coefficient Ka", undefined, "0.33 for φ' = 30°")}
+          {field("surchargeKpa", "Traffic surcharge on approach", "kPa", "Cl 14.2. Confirm for the project")}
+          {field("brakeHeight", "Braking force height above base", "m", "Usually the bearing level")}
+        </div>
+        <p className="answer-note">Earth thrust {fmt(earth, 1)} kN at H/3 · Surcharge thrust {fmt(surcharge, 1)} kN at H/2 · Abutment weight {fmt(selfWeight, 1)} kN. All unfactored.</p>
+      </Card>
+
+      <Card step="3" title="Foundation">
+        <div className="calc-fields">
+          <Select label="Foundation type" value={foundation} onChange={setFoundation}>
+            <option value="spread">Spread footing / mass abutment</option>
+            <option value="piles">Pile cap on piles</option>
+          </Select>
+          {foundation === "spread" ? <>
+            {field("width", "Footing width in direction of traffic B", "m")}
+            {field("friction", "Base friction coefficient", undefined, "Design value, tan δ")}
+            {field("slsLimit", "SLS allowable bearing pressure", "kPa", "From the geotechnical report")}
+            {field("ultimate", "Ultimate geotechnical bearing capacity", "kPa")}
+            {field("phiG", "Geotechnical reduction factor φg", undefined, "AS 5100.3 Cl 10.3: typically 0.45 to 0.65")}
+          </> : <>
+            <label className="calc-field"><span>Pile row positions from toe</span><small>m, comma separated, for example 0.15, 0.55</small>
+              <input type="text" value={v.positions} onChange={e => set("positions")(e.target.value)} /></label>
+            {field("perRow", "Piles in each row", undefined, "Along the abutment length")}
+            {field("pileD", "Pile diameter", "m")}
+            {field("pileL", "Pile embedded length", "m")}
+            {field("qb", "Ultimate end bearing", "kPa")}
+            {field("fs", "Ultimate shaft adhesion", "kPa")}
+            {field("pilePhi", "Geotechnical reduction factor φg", undefined, "AS 2159 / AS 5100.3")}
+            {field("compression", "Design compression override", "kN", `Calculated ${fmt(pileCap?.compression ?? NaN, 1)} kN`)}
+            {field("uplift", "Design uplift override", "kN", `Calculated ${fmt(pileCap?.uplift ?? NaN, 1)} kN`)}
           </>}
-          {foundation === "piles" && (p ? <div className="overflow-x-auto"><table className="w-full text-left">
-            <thead><tr><th>Pile</th><th>Position (m)</th><th>Axial demand (kN)</th><th>ULS utilisation</th></tr></thead>
-            <tbody>{p.map((n, j) => {
-              const capacity = value(n < 0 ? "tension" : "compression");
-              return <tr key={j}><td>{j + 1}</td><td>{display(piles[j])}</td><td>{display(n)}</td><td>{item.limit !== "ULS" || !nonnegative([capacity]) ? "—" : capacity > 0 ? display(Math.abs(n) / capacity) : n === 0 ? "0.00" : "No resistance"}</td></tr>;
-            })}</tbody>
-          </table></div> : <p>This pile layout cannot resolve the applied moment through axial forces.</p>)}
-        </div> : <p>Enter the deck, foundation and case inputs to calculate.</p>}
-        {cases.length > 1 && <button type="button" className="justify-self-start underline" onClick={() => setCases(cases.filter((_, j) => i !== j))}>Remove {item.name || "load case"}</button>}
-      </fieldset>;
-    })}
-    <button type="button" className="justify-self-start rounded border px-3 py-2" onClick={() => setCases([...cases, { ...initialCases[2], template: -1, name: "New load case" }])}>Add load case</button>
-    <p>Spread-footing sliding includes base friction only. Toe and heel pressures use a linear, compression-only contact model. Enter a geotechnical pressure limit compatible with the peak contact pressure and limit state. Pile demand assumes a rigid cap, equal axial stiffness and bending about one axis. Verify pile lateral actions, group behaviour, settlement, water and uplift, concrete strength and reinforcement separately.</p>
-  </section>;
+        </div>
+        {foundation === "spread"
+          ? <p className="answer-note">ULS bearing limit = φg × ultimate = {fmt(ulsLimit, 1)} kPa. Pressures use a linear, compression-only contact model.</p>
+          : <p className="answer-note">Design pile compression φg(qb·Ab + fs·As) = {fmt(compressionCap, 1)} kN, uplift φg·fs·As = {fmt(upliftCap, 1)} kN. Assumes a rigid cap and equal pile stiffness. Check pile lateral capacity and structural design separately.</p>}
+      </Card>
+
+      <Card step="4" title="Load combinations (AS 5100.2)">
+        <div className="storage-table" style={{ maxHeight: "none" }}><table>
+          <thead><tr><th style={{ textAlign: "left" }}>Load factor</th>{cases.map(c => <th key={c.name}>{c.name}</th>)}</tr></thead>
+          <tbody>{factorRows.map(([key, label]) => <tr key={key}><td style={{ textAlign: "left" }}>{label}</td>
+            {cases.map((c, i) => <td key={c.name}><input aria-label={`${c.name} ${label} factor`} type="number" step="any" min="0" style={{ width: 58, padding: "6px 6px" }}
+              value={c.factors[key]} onChange={e => setFactor(i, key, e.target.value)} /></td>)}</tr>)}</tbody>
+        </table></div>
+        <p className="answer-note">Defaults: dead load 1.2 (0.85 where it helps stability), wearing surface 2.0 (0.7), traffic and braking 1.8, earth pressure 1.5, all 1.0 at SLS (wearing surface 1.3). The stability cases use the lower dead load factors because self weight resists overturning and sliding. Edit any factor to suit the asset owner&apos;s requirements.</p>
+      </Card>
+
+      <Card step="5" title="Results by load case">
+        <div className="storage-table" style={{ maxHeight: "none" }}><table>
+          <thead><tr><th style={{ textAlign: "left" }}>Case</th><th>N kN</th><th>H kN</th>
+            {foundation === "spread" ? <><th>e m</th><th>Toe kPa</th><th>Heel kPa</th><th>Limit kPa</th><th>Bearing</th><th>Overturning</th><th>Sliding</th></>
+              : <><th>Max pile kN</th><th>Min pile kN</th><th>Utilisation</th></>}</tr></thead>
+          <tbody>{results.map(r => <tr key={r.c.name}><td style={{ textAlign: "left" }}>{r.c.name} <small>({r.c.limit})</small></td>
+            {r.a ? <><td>{fmt(r.a.normal, 1)}</td><td>{fmt(r.a.horizontal, 1)}</td>
+              {foundation === "spread" && "p" in r ? r.p ? <><td>{fmt(r.p.eccentricity, 3)}</td><td>{fmt(r.p.toe, 1)}</td><td>{fmt(r.p.heel, 1)}</td><td>{fmt(r.limit, 0)}</td>
+                <td className={r.bearing <= 1 ? "pass" : "fail"}>{pct(r.bearing)}</td>
+                <td className={r.c.limit === "SLS" ? "" : r.overturning >= 1 ? "pass" : "fail"}>{ratio(r.overturning)}</td>
+                <td className={r.c.limit === "SLS" ? "" : r.sliding >= 1 ? "pass" : "fail"}>{ratio(r.sliding)}</td></>
+                : <td colSpan={7} className="fail">Resultant outside the footing. Overturns.</td>
+              : "forces" in r && r.forces ? <><td>{fmt(r.maxC, 1)}</td><td>{fmt(r.minC, 1)}</td><td className={r.c.limit === "SLS" ? "" : r.bearing <= 1 ? "pass" : "fail"}>{r.c.limit === "SLS" ? "—" : pct(r.bearing)}</td></>
+              : <td colSpan={3} className="fail">Enter at least two pile rows to resist the moment.</td>}</>
+              : <td colSpan={9}>Check the inputs.</td>}</tr>)}</tbody>
+        </table></div>
+        <p className="answer-note">Overturning and sliding are ULS ratios of factored resistance to factored demand and need to be at least 1.0. SLS rows are for service pressure only. {foundation === "spread" ? "A resultant outside the middle third means partial contact, which is shown in the toe and heel pressures." : ""}</p>
+      </Card>
+    </div>
+
+    <aside className="calc-results results-card">
+      <p className="eyebrow">FOUNDATION CHECK</p>
+      <ResultHero label={bearingWorst ? `Governing: ${bearingWorst.name}` : "Enter inputs"} value={bearingWorst ? allPass ? "PASS" : "FAIL" : "—"}
+        unit={bearingWorst ? bearingWorst.value === Infinity ? (foundation === "spread" ? "resultant outside footing" : "pile layout cannot resist moment") : `${pct(bearingWorst.value)} bearing` : undefined} />
+      <div className="check-row">
+        <Check ok={bearingWorst ? bearingWorst.value <= 1 : null} pass="ULS bearing" fail="ULS bearing" />
+        <Check ok={overturnWorst ? overturnWorst.value >= 1 : null} pass="Overturning" fail="Overturning" />
+        <Check ok={slidingWorst ? slidingWorst.value >= 1 : null} pass="Sliding" fail="Sliding" />
+        {foundation === "spread" && (() => { const sls = results.filter(r => r.c.limit === "SLS" && r.a && "bearing" in r);
+          return sls.length ? <Check ok={sls.every(r => (r.bearing ?? Infinity) <= 1)} pass="SLS pressure" fail="SLS pressure" /> : null; })()}
+      </div>
+      {bearingWorst && <Metric name={foundation === "spread" ? "Max ULS bearing utilisation" : "Max ULS pile utilisation"} value={bearingWorst.value === Infinity ? `Overturns (${bearingWorst.name})` : `${pct(bearingWorst.value)} (${bearingWorst.name})`} />}
+      {overturnWorst && <Metric name="Min overturning ratio" value={`${ratio(overturnWorst.value)} (${overturnWorst.name})`} />}
+      {slidingWorst && <Metric name="Min sliding ratio" value={`${ratio(slidingWorst.value)} (${slidingWorst.name})`} />}
+      <Metric name="Deck reaction G + SDL + Q" value={`${fmt(P + S + Q, 1)} kN`} />
+      <Metric name="Braking force" value={`${fmt(B, 1)} kN`} />
+      {foundation === "spread" && <Metric name="ULS bearing limit φg·qult" value={`${fmt(ulsLimit, 0)} kPa`} />}
+      <p className="answer-note" style={{ marginTop: 12 }}>Confirm bearing capacity, settlement, scour and groundwater with the geotechnical report. Design the reinforcement separately.</p>
+    </aside></div>
+  </div>;
 }
-
-

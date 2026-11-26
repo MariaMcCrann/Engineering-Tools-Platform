@@ -159,7 +159,7 @@ export default function Home() {
     : view === "rock-protection" ? <>{toolHeader("Rock Protection / Riprap", "rock-protection")}<RockProtectionTool/></>
     : view === "lifting-beams" ? <><header className="hub-header"><span>Lifting Beams</span><a href="/lifting-beams" target="_blank" rel="noopener noreferrer">Open full page</a></header><LiftingBeamTool/></>
     : view === "blinding-slab" ? <>{toolHeader("Blinding Slab", "blinding-slab")}<BlindingSlabTool /></>
-    : view === "abutment-foundations" ? <>{toolHeader("Abutment and Foundations", "abutment-foundations")}<div className="max-w-5xl p-6"><AbutmentStability /></div></>
+    : view === "abutment-foundations" ? <>{toolHeader("Abutment and Foundations", "abutment-foundations")}<AbutmentStability /></>
     : view === "bank-seat" ? <>{toolHeader("Bridge Bank Seat", "bank-seat")}<BankSeatTool/></>
     : view === "headwall-concrete" ? <>{toolHeader("Headwall Concrete", "headwall-concrete")}<HeadwallStructuralTool/></>
     : view === "base-slab-concrete" ? <>{toolHeader("Base Slab Concrete", "base-slab-concrete")}<BaseSlabStructuralTool/></>

@@ -2,255 +2,190 @@
 
 import { useState } from "react";
 import { abutmentPath, seatTransferKey, type SeatReactions } from "./bank-seat-transfer";
-import { peakReaction, rectangularContactArea, sm1600Reactions } from "./bank-seat-traffic";
+import { peakReaction, rectangularContactArea } from "./bank-seat-traffic";
 import { BankSeatDiagram } from "./BankSeatDiagrams";
+import { AS5100_FACTORS as F, EXAMPLE_SEAT as E, brakingForce, designLanes, permanentSeatReaction, seatTraffic } from "./bridge-calcs";
+import { Card, Check, Field, Metric, ResultHero, Select, TitleRow, fmt } from "./BridgeUi";
 
-const fields = [
-  ["span", "Span between supports (m)", ""],
-  ["width", "Loaded width across seat (m)", ""],
-  ["beams", "Number of deck beams", ""],
-  ["beamMass", "Mass per beam (t)", ""],
-  ["kerbs", "Number of additional kerb units", "0"],
-  ["kerbMass", "Mass per kerb (t)", "0"],
-  ["other", "Other structural dead-load reaction at seat (kN)", "0"],
-  ["surfacing", "Superimposed dead-load reaction at seat (kN)", "0"],
-] as const;
-
-const customFields = [
-  ["udl", "Concurrent full-span traffic UDL (kN/m)", "0"],
-  ["axleDynamic", "Axle dynamic multiplier", "1"],
-  ["udlDynamic", "UDL dynamic multiplier", "1"],
-] as const;
-
-const optional = [
-  ["ulsG", "ULS structural dead-load factor"],
-  ["ulsQ", "ULS traffic factor"],
-  ["slsG", "SLS structural dead-load factor"],
-  ["ulsSurfacing", "ULS superimposed dead-load factor"],
-  ["slsSurfacing", "SLS superimposed dead-load factor"],
-  ["slsQ", "SLS traffic factor"],
-  ["bearingG", "Structural dead-load reaction at pad (kN)"],
-  ["bearingSurfacing", "Superimposed dead-load reaction at pad (kN)"],
-  ["bearingQ", "Traffic reaction at pad including dynamics (kN)"],
-  ["padLength", "Loaded contact length along span (mm)"],
-  ["padWidth", "Loaded contact width across span (mm)"],
-  ["area", "Verified effective contact area override (mm²)"],
-  ["resistance", "Local ULS bearing resistance (kN)"],
-] as const;
+const initial: Record<string, string> = {
+  span: String(E.span), width: String(E.width), beams: String(E.beams), beamMass: String(E.beamMass),
+  kerbs: String(E.kerbs), kerbMass: String(E.kerbMass), other: String(E.other), surfacing: String(E.surfacing), roadWidth: String(E.roadWidth),
+  udl: "0", axleDynamic: "1.4", udlDynamic: "1",
+  ulsG: String(F.deadUls), slsG: String(F.deadSls), ulsS: String(F.sdlUls), slsS: String(F.sdlSls), ulsQ: String(F.trafficUls), slsQ: String(F.trafficSls),
+  padGShare: "", padSShare: "", padQShare: "", bearingG: "", bearingS: "", bearingQ: "",
+  padLength: "", padWidth: "", area: "", resistance: "",
+};
 
 export function BankSeatTool() {
-  const [values, setValues] = useState<Record<string, string>>(
-    { ...Object.fromEntries([...fields, ...customFields].map(([key, , initial]) => [key, initial])),
-      slsG: "1", slsSurfacing: "1.3", ulsSurfacing: "2" }
-  );
-  const [train, setTrain] = useState("");
+  const [v, setV] = useState(initial);
   const [model, setModel] = useState("sm1600");
+  const [train, setTrain] = useState("");
   const [padSource, setPadSource] = useState("linked");
-  const [padTrafficModel, setPadTrafficModel] = useState("");
-  const number = (key: string) => values[key]?.trim() ? Number(values[key]) : NaN;
+  const [padModel, setPadModel] = useState("");
+  const n = (key: string) => v[key]?.trim() ? Number(v[key]) : NaN;
+  const set = (key: string) => (value: string) => setV({ ...v, [key]: value });
+  const field = (key: string, label: string, unit?: string, hint?: string, placeholder?: string) =>
+    <Field key={key} label={label} unit={unit} hint={hint} placeholder={placeholder} value={v[key]} onChange={set(key)} />;
+
+  const span = n("span"), width = n("width"), beams = n("beams");
+  const geometryOk = span > 0 && width > 0 && Number.isInteger(beams) && beams >= 0 && Number.isInteger(n("kerbs")) &&
+    ["beamMass", "kerbMass", "other", "surfacing"].every(key => n(key) >= 0);
+  const permanent = geometryOk ? permanentSeatReaction(beams, n("beamMass"), n("kerbs"), n("kerbMass"), n("other")) : NaN;
+  const surfacing = geometryOk ? n("surfacing") : NaN;
+  const lanes = designLanes(n("roadWidth"));
+  const { rows: roadLoads, governing } = seatTraffic(span, lanes);
+
   const axles = train.split("\n").filter(line => line.trim()).map(line => line.trim().split(/[,\s]+/).map(Number));
-  const validAxles = axles.length <= 100 &&
-    axles.every(row => row.length === 2 && row.every(Number.isFinite) && row[0] > 0 && row[1] >= 0) &&
-    (axles.length === 0 || axles[0][1] === 0);
-  const span = number("span");
-  const width = number("width");
-  const valid = fields.every(([key]) => Number.isFinite(number(key)) && number(key) >= 0) &&
-    span > 0 && width > 0 && Number.isInteger(number("beams")) && Number.isInteger(number("kerbs"));
-  const permanent = (number("beams") * number("beamMass") + number("kerbs") * number("kerbMass")) * 9.8 / 2 + number("other");
-  const lanes = Math.floor(number("roadWidth") / 3.2 + 1e-9);
-  const roadLoads = span > 0 && Number.isFinite(span) && Number.isSafeInteger(lanes) && lanes > 0
-    ? sm1600Reactions(span, lanes) : [];
-  const governing = roadLoads.reduce<(typeof roadLoads)[number] | undefined>(
-    (max, row) => !max || row.total > max.total ? row : max, undefined
-  );
-  const validCustom = span > 0 && Number.isFinite(span) && validAxles &&
-    customFields.every(([key]) => Number.isFinite(number(key)) && number(key) >= 0) &&
-    number("axleDynamic") >= 1 && number("udlDynamic") >= 1;
-  const customTraffic = validCustom
-    ? peakReaction(span, axles) * number("axleDynamic") + number("udl") * span / 2 * number("udlDynamic")
-    : NaN;
+  const validAxles = axles.length > 0 && axles.length <= 100 &&
+    axles.every(row => row.length === 2 && row.every(Number.isFinite) && row[0] > 0 && row[1] >= 0) && axles[0][1] === 0;
+  const customTraffic = span > 0 && validAxles && n("udl") >= 0 && n("axleDynamic") >= 1 && n("udlDynamic") >= 1
+    ? peakReaction(span, axles) * n("axleDynamic") + n("udl") * span / 2 * n("udlDynamic") : NaN;
   const traffic = model === "sm1600" ? governing?.total ?? NaN : customTraffic;
-  const factor = (key: string) => {
-    if (model === "sm1600" && !values[key]?.trim()) {
-      if (key === "ulsQ") return 1.8;
-      if (key === "slsQ") return 1;
-    }
-    return number(key);
-  };
-  const format = (value: number, unit = "") =>
-    Number.isFinite(value) ? value.toFixed(2) + (unit ? " " + unit : "") : "—";
-  const factored = (reaction: number, key: string) => {
-    const multiplier = factor(key);
-    return reaction === 0 ? 0 : Number.isFinite(reaction) && reaction > 0 &&
-      Number.isFinite(multiplier) && multiplier >= 0 ? reaction * multiplier : NaN;
-  };
-  const surfacing = number("surfacing");
-  const deckCombination = (gf: string, qf: string, sf: string) => valid
-    ? factored(permanent, gf) + factored(traffic, qf) + factored(surfacing, sf)
-    : NaN;
-  const area = values.area?.trim() ? number("area") : rectangularContactArea(number("padLength"), number("padWidth"));
-  const linkedPad = padSource === "linked";
-  const padTraffic = model === "sm1600" && padTrafficModel
-    ? roadLoads.find(row => row.name === padTrafficModel)?.total ?? NaN
-    : traffic;
-  const padShare = (reaction: number, key: string) => {
-    const share = number(key);
-    return reaction === 0 ? 0 : Number.isFinite(reaction) && reaction > 0 &&
-      share >= 0 && share <= 100 ? reaction * share / 100 : NaN;
-  };
-  const padG = linkedPad ? padShare(valid ? permanent : NaN, "padGShare") : number("bearingG");
-  const padS = linkedPad ? padShare(valid ? surfacing : NaN, "padSShare")
-    : values.bearingSurfacing?.trim() ? number("bearingSurfacing") : 0;
-  const padQ = linkedPad ? padShare(padTraffic, "padQShare") : number("bearingQ");
-  const bearing = factored(padG, "ulsG") + factored(padS, "ulsSurfacing") + factored(padQ, "ulsQ");
-  const results: [string, number, string][] = [
-    ["Permanent deck reaction", valid ? permanent + surfacing : NaN, "kN"],
-    ["Equivalent permanent line load across seat", valid ? (permanent + surfacing) / width : NaN, "kN/m"],
-    ["Peak traffic reaction", traffic, "kN"],
-    ["ULS vertical deck reaction", deckCombination("ulsG", "ulsQ", "ulsSurfacing"), "kN"],
-    ["SLS vertical deck reaction", deckCombination("slsG", "slsQ", "slsSurfacing"), "kN"],
-  ];
-  const padActions: [string, number, string][] = [
-    ["Structural dead load at pad", padG, "kN"],
-    ["Superimposed dead load at pad", padS, "kN"],
-    ["Traffic at pad including dynamics", padQ, "kN"],
-  ];
-  const localResults: [string, number, string][] = [
-    ["Effective contact area", area > 0 ? area : NaN, "mm²"],
-    ["Local ULS bearing reaction", bearing, "kN"],
-    ["Average ULS contact pressure", area > 0 ? 1000 * bearing / area : NaN, "MPa"],
-    ["Vertical bearing utilisation", number("resistance") > 0 ? 100 * bearing / number("resistance") : NaN, "%"],
-  ];
-  const input = ([key, label]: readonly [string, string, ...string[]], max?: number) => (
-    <label key={key} className="grid gap-1">
-      {label}
-      <input className="rounded border border-slate-400 px-3 py-2" type="number" min="0" max={max} step="any"
-        placeholder={key === "ulsQ" || key === "slsQ" ? format(factor(key)) : undefined}
-        value={values[key] ?? ""} onChange={event => setValues({ ...values, [key]: event.target.value })} />
-    </label>
-  );
+  const braking = model === "sm1600" ? brakingForce(span, lanes) : null;
+
+  const combine = (g: string, s: string, q: string) => permanent * n(g) + surfacing * n(s) + traffic * n(q);
+  const uls = combine("ulsG", "ulsS", "ulsQ");
+  const sls = combine("slsG", "slsS", "slsQ");
+
+  const evenShare = beams > 0 ? 100 / beams : NaN;
+  const share = (key: string, fallback: number) => v[key].trim() ? n(key) : fallback;
+  const padTraffic = model === "sm1600" && padModel ? roadLoads.find(row => row.name === padModel)?.total ?? NaN : traffic;
+  const linked = padSource === "linked";
+  const padG = linked ? permanent * share("padGShare", evenShare) / 100 : n("bearingG");
+  const padS = linked ? surfacing * share("padSShare", evenShare) / 100 : v.bearingS.trim() ? n("bearingS") : 0;
+  const padQ = linked ? padTraffic * share("padQShare", NaN) / 100 : n("bearingQ");
+  const padUls = padG * n("ulsG") + padS * n("ulsS") + padQ * n("ulsQ");
+  const area = v.area.trim() ? n("area") : rectangularContactArea(n("padLength"), n("padWidth"));
+  const pressure = area > 0 ? 1000 * padUls / area : NaN;
+  const utilisation = n("resistance") > 0 ? padUls / n("resistance") : NaN;
+
   const openAbutment = () => {
-    const available = (value: number) => Number.isFinite(value) && value >= 0 ? value : null;
+    const ok = (value: number) => Number.isFinite(value) && value >= 0 ? value : null;
     const reactions: SeatReactions = {
-      permanent: available(valid ? permanent : NaN),
-      superimposed: available(valid ? surfacing : NaN),
-      traffic: available(traffic),
-      trafficOptions: model === "sm1600" ? roadLoads.filter(row => Number.isFinite(row.total))
-        .map(row => ({ name: row.name, value: row.total })) : [],
+      permanent: ok(permanent), superimposed: ok(surfacing), traffic: ok(traffic),
+      trafficOptions: model === "sm1600" ? roadLoads.map(row => ({ name: row.name, value: row.total })) : [],
+      span: ok(span), lanes: model === "sm1600" ? lanes : null, braking: braking ? braking.design : null,
     };
     let destination = abutmentPath;
-    try {
-      window.sessionStorage.setItem(seatTransferKey, JSON.stringify(reactions));
-      destination += "?from-seat=1";
-    } catch {
-      // The destination also supports manual entry if browser storage is unavailable.
-    }
+    try { window.sessionStorage.setItem(seatTransferKey, JSON.stringify(reactions)); destination += "?from-seat=1"; } catch { /* manual entry still works */ }
     window.location.assign(destination);
   };
-  const resultList = (items: [string, number, string][]) => (
-    <dl aria-live="polite" className="grid gap-3 rounded border border-slate-400 p-4 sm:grid-cols-3">
-      {items.map(([label, value, unit]) => <div key={label}><dt>{label}</dt><dd className="font-semibold">{format(value, unit)}</dd></div>)}
-    </dl>
-  );
 
-  return (
-    <div className="grid max-w-5xl gap-8 p-6">
-      <nav aria-label="Bridge bank seat checks" className="flex flex-wrap gap-x-5 gap-y-2 underline">
-        <a href="#deck-actions">Deck reactions</a>
-        <a href="#local-bearing">Beam-to-seat contact</a>
-      </nav>
-      <section className="grid gap-4" aria-labelledby="deck-actions">
-        <h2 id="deck-actions" className="text-xl font-semibold">Deck reactions at the bank seat</h2>
-        <p>The results are for one seat at one end of a simply supported span. Each end takes 50% of the total beam and kerb self-weight under the assumed symmetric loading. The beam weight split is already included.</p>
+  return <div className="content calc-content bridge-tool">
+    <TitleRow eyebrow="BRIDGE SUBSTRUCTURE · AS 5100.2" title="Bridge Bank Seat"
+      subtitle="Deck reactions at one bank seat of a simply supported span with SM1600 traffic, AS 5100.2 load factors and a beam-to-seat bearing check." />
+    <div className="warning"><div>i</div><p>Example values are loaded so you can see how the tool works. Replace them with your project values. Grey fields are optional.</p></div>
+    <div className="calc-layout"><div>
+      <Card step="1" title="Span and permanent loads">
         <BankSeatDiagram view="span" />
-        <fieldset className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <legend className="mb-3 font-semibold">Span geometry and permanent loads</legend>
-          {fields.map(field => input(field))}
-        </fieldset>
-        <label className="grid max-w-sm gap-1">Vehicle load model
-          <select className="rounded border border-slate-400 p-2" value={model} onChange={event => setModel(event.target.value)}>
-            <option value="sm1600">AS 5100.2 SM1600 design traffic</option>
-            <option value="custom">Project-specific axle train</option>
-          </select>
-        </label>
-        {model === "sm1600" ? <>
-          <div className="max-w-sm">{input(["roadWidth", "Clear road width between external barriers (m)"])}</div>
-          <p>AS 5100.2 Clauses 7.5–7.6 determine the number of 3.2 m design lanes and their accompanying factors. The road width is measured independently of the loaded seat width.</p>
-          {governing ? <details open className="rounded border border-slate-400 p-3">
-            <summary className="cursor-pointer font-semibold">SM1600 vehicle load breakdown</summary>
-            <div className="overflow-x-auto">
-              <table className="mt-3 w-full min-w-[40rem] text-left">
-                <thead className="bg-slate-100 text-slate-900"><tr><th scope="col" className="p-2">Seat reaction component</th>{roadLoads.map(row => <th key={row.name} scope="col" className="p-2">{row.name}</th>)}</tr></thead>
-                <tbody>
-                  {([
-                    ["Axles, one lane", "axleReaction", "kN"],
-                    ["Full-span UDL, one lane", "udlReaction", "kN"],
-                    ["Dynamic load allowance α", "alpha", ""],
-                    ["Reaction including dynamics, one lane", "laneReaction", "kN"],
-                    ["Total reaction with accompanying lane factors", "total", "kN"],
-                  ] as const).map(([label, key, unit]) => <tr key={key} className="border-t border-slate-200">
-                    <th scope="row" className="p-2 font-normal">{label}</th>
-                    {roadLoads.map(row => <td key={row.name} className="p-2">{format(row[key], unit)}</td>)}
-                  </tr>)}
-                </tbody>
-              </table>
-            </div>
-            <p className="mt-2 rounded bg-emerald-50 p-2 font-semibold text-emerald-950">Governing total seat reaction over {lanes} design {lanes === 1 ? "lane" : "lanes"}: {governing.name}, {format(traffic, "kN")} before load factors.</p>
-          </details> : <p>Enter a positive span and a clear road width sufficient for at least one standard design lane. Use the project-specific model for an approved alternative.</p>}
-          <p>The calculation moves axle groups along the span in both directions and applies each model’s UDL and above-ground dynamic allowance from Table 7.7.2. Use transverse load analysis for individual bearings and local wheel effects.</p>
-        </> : <>
-          <fieldset className="grid gap-4 sm:grid-cols-3"><legend className="mb-3 font-semibold">Project-specific traffic inputs</legend>{customFields.map(field => input(field))}</fieldset>
-          <label className="grid gap-1">Axle train (load in kN and offset in m, one axle per line)
-            <textarea className="rounded border border-slate-400 p-3 font-mono" rows={4}
-              value={train} onChange={event => setTrain(event.target.value)} placeholder="160, 0" />
-          </label>
-          {!validAxles && <p role="alert">Enter positive axle loads and non-negative offsets, starting at zero. Maximum 100 axles.</p>}
-          <p>Enter one approved concurrent case at a time. The solver allows partial axle trains on the span and applies the UDL over the full span.</p>
-        </>}
-        <fieldset className="grid gap-4 sm:grid-cols-3">
-          <legend className="mb-3 font-semibold">Load factors for vertical deck reactions</legend>
-          {optional.slice(0, 6).map(field => input(field))}
-        </fieldset>
-        <p>SLS means serviceability limit state. Use AS 5100.2 Table 6.2 for structural dead load (1.0 at SLS), Table 6.3 for superimposed dead load (typically 1.3 at SLS), and Table 7.10(A) for SM1600 traffic (1.0 at SLS and 1.8 at ULS). Select the ULS structural dead-load factor for the action and material. Enter project-specific traffic factors for a custom vehicle. Include surfacing and similar loads in the separate superimposed dead-load field.</p>
-        {resultList(results)}
-      </section>
-      <section className="grid gap-4 border-t border-slate-400 pt-5" aria-labelledby="local-bearing">
-        <h2 id="local-bearing" className="text-xl font-semibold">Beam-to-seat contact check</h2>
-        <BankSeatDiagram view="pad" />
-        <p>Check compression beneath one beam end, either in direct contact with the seat or through a bearing pad. Design the reinforced-concrete bank seat separately using the bearing positions, seat geometry and support conditions. That design establishes the overall dimensions and reinforcement for flexure, shear or strut-and-tie action, anchorage and detailing.</p>
-        <label className="grid max-w-md gap-1">Source of pad reactions
-          <select className="rounded border border-slate-400 p-2" value={padSource} onChange={event => setPadSource(event.target.value)}>
-            <option value="linked">Use a share of the deck reactions above</option>
-            <option value="manual">Enter reactions from a separate analysis</option>
-          </select>
-        </label>
-        {linkedPad ? <>
-          <p>The percentages apply to one beam contact as a share of the reaction already calculated for one seat. For example, 10 identical beams with equal self-weight reactions each carry 10% of the beam self-weight at that seat. Traffic shares depend on transverse load distribution. Structural dead load includes the other structural reaction entered above. Use 100% only for an action carried entirely through this contact. Check the traffic case and share together for the pad being assessed.</p>
-          {model === "sm1600" && <label className="grid max-w-md gap-1">Traffic model for this pad
-            <select className="rounded border border-slate-400 p-2" value={padTrafficModel} onChange={event => setPadTrafficModel(event.target.value)}>
-              <option value="">Governing whole-seat traffic reaction</option>
-              {["S1600", "M1600", "M1600 tri-axle", "A160"].map(name => <option key={name}>{name}</option>)}
-            </select>
-          </label>}
-          <div className="grid gap-4 sm:grid-cols-3">
-            {input(["padGShare", "Structural dead-load share (%)"], 100)}
-            {input(["padSShare", "Superimposed dead-load share (%)"], 100)}
-            {input(["padQShare", "Traffic reaction share (%)"], 100)}
-          </div>
-        </> : <div className="grid gap-4 sm:grid-cols-3">{optional.slice(6, 9).map(field => input(field))}</div>}
-        {resultList(padActions)}
-        <p>For direct contact, use the actual loaded beam underside width and the loaded length along the span. Where a pad is installed, use its loaded dimensions for full rectangular contact. For partial contact, eccentric loading or a bearing with a specified effective area, enter a verified area.</p>
-        <div className="grid gap-4 sm:grid-cols-3">{optional.slice(9).map(field => input(field))}</div>
-        <p>Local ULS bearing resistance is the design force capacity in kN of the governing pad or supporting concrete check. Refer to AS 5100.4 for bridge bearings and AS 5100.5 for supporting concrete. Use the footing checks below for soil bearing pressure in kPa.</p>
-        {resultList(localResults)}
-      </section>
-      <div className="grid justify-items-start gap-2 border-t border-slate-400 pt-5">
-        <button type="button" className="rounded bg-blue-800 px-4 py-2 font-semibold text-white" onClick={openAbutment}>
-          Open abutment and foundation calculations
-        </button>
-        <p>The abutment tool receives the unfactored whole-seat reactions above, with dynamics included in traffic.</p>
-      </div>
-    </div>
-  );
-}
+        <div className="calc-fields">
+          {field("span", "Span between bearings", "m")}
+          {field("width", "Seat length across bridge", "m", "Used for the load per metre")}
+          {field("beams", "Number of deck beams")}
+          {field("beamMass", "Mass per beam", "t")}
+          {field("kerbs", "Number of separate kerb units")}
+          {field("kerbMass", "Mass per kerb unit", "t")}
+          {field("other", "Other dead load at this seat", "kN", "Diaphragms, barriers, services")}
+          {field("surfacing", "Superimposed dead load at this seat", "kN", "Wearing surface. Factored as SDL")}
+        </div>
+        <p className="answer-note">Each seat carries half of the beam and kerb self weight (g = 9.81 m/s²).</p>
+      </Card>
 
+      <Card step="2" title="Traffic load (AS 5100.2 Section 7)">
+        <div className="calc-fields">
+          <Select label="Vehicle load model" value={model} onChange={setModel}>
+            <option value="sm1600">SM1600 (S1600, M1600, A160)</option>
+            <option value="custom">Project-specific axle train</option>
+          </Select>
+          {model === "sm1600" && field("roadWidth", "Clear width between barriers", "m", `${lanes} design lane${lanes === 1 ? "" : "s"} at 3.2 m (Cl 7.5)`)}
+        </div>
+        {model === "sm1600" ? governing ? <>
+          <div className="storage-table" style={{ marginTop: 16 }}><table>
+            <thead><tr><th style={{ textAlign: "left" }}>Seat reaction, kN</th>{roadLoads.map(row => <th key={row.name}>{row.name}</th>)}</tr></thead>
+            <tbody>
+              {([["Axles, one lane", "axleReaction", 1], ["UDL, one lane", "udlReaction", 1], ["Dynamic load allowance α (Table 7.7.2)", "alpha", 2],
+                ["One lane including α", "laneReaction", 1], ["All lanes with lane factors (Cl 7.6)", "total", 1]] as const).map(([label, key, d]) =>
+                <tr key={key}><td style={{ textAlign: "left" }}>{label}</td>{roadLoads.map(row => <td key={row.name}>{key === "total" && row === governing ? <strong>{fmt(row[key], d)}</strong> : fmt(row[key], d)}</td>)}</tr>)}
+            </tbody>
+          </table></div>
+          <p className="answer-note">Governing: <strong>{governing.name}</strong>, {fmt(traffic, 1)} kN unfactored including dynamic allowance. Axle groups are moved along the span in both directions to find the peak seat reaction.</p>
+          {braking && <p className="answer-note">Braking force (Cl 7.8.2): {fmt(braking.design, 1)} kN unfactored, {braking.governs} case. Passed to the abutment tool.</p>}
+        </> : <p className="answer-note">Enter a span and a clear width of at least 3.2 m for one design lane.</p> : <>
+          <div className="calc-fields" style={{ marginTop: 16 }}>
+            {field("udl", "Concurrent lane UDL", "kN/m")}
+            {field("axleDynamic", "Axle dynamic factor (1 + α)", undefined, "1.4 for A160 / single axle")}
+            {field("udlDynamic", "UDL dynamic factor (1 + α)")}
+          </div>
+          <label className="calc-field" style={{ display: "block", marginTop: 16 }}><span>Axle train, one axle per line: load kN, offset m</span>
+            <textarea rows={4} style={{ width: "100%", fontFamily: "monospace" }} placeholder={"160, 0"} value={train} onChange={event => setTrain(event.target.value)} /></label>
+          {train.trim() && !validAxles && <p className="fail" style={{ padding: 8, borderRadius: 6 }}>Enter positive loads with offsets starting at 0, maximum 100 axles.</p>}
+        </>}
+      </Card>
+
+      <Card step="3" title="Load factors (AS 5100.2)">
+        <div className="storage-table"><table>
+          <thead><tr><th style={{ textAlign: "left" }}>Action</th><th>ULS</th><th>SLS</th><th style={{ textAlign: "left" }}>Reference</th></tr></thead>
+          <tbody>
+            {([["Structural dead load", "ulsG", "slsG", "Table 6.2, concrete"], ["Superimposed dead load", "ulsS", "slsS", "Table 6.3, wearing surface"],
+              ["Traffic", "ulsQ", "slsQ", "Table 7.10(A), SM1600"]] as const).map(([label, ul, sl, ref]) =>
+              <tr key={ul}><td style={{ textAlign: "left" }}>{label}</td>
+                <td><input aria-label={`${label} ULS factor`} type="number" step="any" min="0" style={{ width: 80 }} value={v[ul]} onChange={e => set(ul)(e.target.value)} /></td>
+                <td><input aria-label={`${label} SLS factor`} type="number" step="any" min="0" style={{ width: 80 }} value={v[sl]} onChange={e => set(sl)(e.target.value)} /></td>
+                <td style={{ textAlign: "left" }}>{ref}</td></tr>)}
+          </tbody>
+        </table></div>
+        <p className="answer-note">Defaults are the AS 5100.2 values for maximum effect. Use 0.85 for concrete dead load and 0.7 for wearing surface where the load reduces safety. The abutment tool does this for you in its stability cases.</p>
+      </Card>
+
+      <Card step="4" title="Beam-to-seat bearing check (optional)">
+        <BankSeatDiagram view="pad" />
+        <div className="calc-fields">
+          <Select label="Reactions at one bearing" value={padSource} onChange={setPadSource}>
+            <option value="linked">Share of the seat reactions above</option>
+            <option value="manual">Enter from a separate analysis</option>
+          </Select>
+          {linked && model === "sm1600" && <Select label="Traffic model at this bearing" value={padModel} onChange={setPadModel}>
+            <option value="">Governing model</option>
+            {roadLoads.map(row => <option key={row.name}>{row.name}</option>)}
+          </Select>}
+          {linked ? <>
+            {field("padGShare", "Dead load share", "%", "Blank = equal share", fmt(evenShare, 1))}
+            {field("padSShare", "Superimposed dead load share", "%", "Blank = equal share", fmt(evenShare, 1))}
+            {field("padQShare", "Traffic share", "%", "From transverse distribution")}
+          </> : <>
+            {field("bearingG", "Dead load at bearing", "kN")}
+            {field("bearingS", "Superimposed dead load at bearing", "kN")}
+            {field("bearingQ", "Traffic at bearing incl. dynamics", "kN")}
+          </>}
+          {field("padLength", "Contact length along span", "mm")}
+          {field("padWidth", "Contact width across span", "mm")}
+          {field("area", "Effective contact area override", "mm²", "Partial or eccentric contact")}
+          {field("resistance", "Design bearing resistance", "kN", "AS 5100.4 pad or AS 5100.5 concrete")}
+        </div>
+        <div className="storage-table" style={{ marginTop: 16 }}><table><tbody>
+          <tr><td style={{ textAlign: "left" }}>Dead / SDL / traffic at bearing</td><td>{fmt(padG, 1)} / {fmt(padS, 1)} / {fmt(padQ, 1)} kN</td></tr>
+          <tr><td style={{ textAlign: "left" }}>ULS bearing reaction</td><td>{fmt(padUls, 1)} kN</td></tr>
+          <tr><td style={{ textAlign: "left" }}>Average ULS contact pressure</td><td>{fmt(pressure, 2)} MPa</td></tr>
+        </tbody></table></div>
+      </Card>
+    </div>
+
+    <aside className="calc-results results-card">
+      <p className="eyebrow">ULS SEAT REACTION</p>
+      <ResultHero label="Factored vertical reaction, one seat" value={fmt(uls, 1)} unit="kN" />
+      <div className="check-row">
+        <Check ok={Number.isFinite(traffic) ? true : null} pass={model === "sm1600" ? `${governing?.name ?? ""} governs` : "Custom traffic"} fail="" />
+        <Check ok={Number.isFinite(utilisation) ? utilisation <= 1 : null} pass={`Bearing ${fmt(100 * utilisation, 0)}%`} fail={`Bearing ${fmt(100 * utilisation, 0)}%`} />
+      </div>
+      <Metric name="Dead load reaction (G)" value={`${fmt(permanent, 1)} kN`} />
+      <Metric name="Superimposed dead load" value={`${fmt(surfacing, 1)} kN`} />
+      <Metric name="Traffic reaction incl. dynamics (Q)" value={`${fmt(traffic, 1)} kN`} />
+      <Metric name="SLS vertical reaction" value={`${fmt(sls, 1)} kN`} />
+      <Metric name="ULS line load along seat" value={`${fmt(uls / width, 1)} kN/m`} />
+      {braking && <Metric name="Braking force (unfactored)" value={`${fmt(braking.design, 1)} kN`} />}
+      {Number.isFinite(utilisation) && <Metric name="Bearing utilisation" value={`${fmt(100 * utilisation, 0)} %`} />}
+      <button type="button" className="download-btn" onClick={openAbutment}>Next: abutment and foundations →</button>
+      <p className="answer-note" style={{ marginTop: 12 }}>Sends the unfactored seat reactions, span, lanes and braking force to the abutment tool. Design the reinforced concrete seat itself separately.</p>
+    </aside></div>
+  </div>;
+}

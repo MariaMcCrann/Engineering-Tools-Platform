@@ -6,6 +6,9 @@ export type SeatReactions = {
   superimposed: number | null;
   traffic: number | null;
   trafficOptions: { name: string; value: number }[];
+  span?: number | null;
+  lanes?: number | null;
+  braking?: number | null;
 };
 
 export function readSeatTransfer(): string {
@@ -22,7 +25,8 @@ export function parseSeatTransfer(raw: string): SeatReactions | null {
   try {
     const data = JSON.parse(raw) as SeatReactions | null;
     const valid = (value: unknown) => typeof value === "number" && Number.isFinite(value) && value >= 0;
-    return data && [data.permanent, data.superimposed, data.traffic].every(value => value === null || valid(value)) &&
+    return data && [data.permanent, data.superimposed, data.traffic, data.span ?? null, data.lanes ?? null, data.braking ?? null]
+      .every(value => value === null || valid(value)) &&
       Array.isArray(data.trafficOptions) && data.trafficOptions.every(row => row && typeof row.name === "string" && valid(row.value))
       ? data : null;
   } catch {
