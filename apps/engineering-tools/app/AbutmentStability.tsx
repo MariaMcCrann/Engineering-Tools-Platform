@@ -1,16 +1,17 @@
 "use client";
 
 import { useState } from "react";
+import { BankSeatDiagram } from "./BankSeatDiagrams";
 
 type Force = { vertical: number; horizontal: number; arm: number; height: number };
 type Case = {
-  name: string; limit: string; traffic: string; useSpan: boolean;
+  name: string; limit: string; traffic: string; useSpan: boolean; spanModel: string; surfacingFactor: string;
   g: string; concreteFactor: string; q: string; earth: string; surcharge: string; braking: string; extra: string;
 };
 const initialCases: Case[] = [
-  { name: "Earth only", limit: "SLS", traffic: "0", useSpan: false, g: "", concreteFactor: "", q: "0", earth: "", surcharge: "0", braking: "0", extra: "0" },
-  { name: "Approach surcharge and braking", limit: "ULS", traffic: "0", useSpan: false, g: "", concreteFactor: "", q: "0", earth: "", surcharge: "", braking: "", extra: "0" },
-  { name: "Traffic on span", limit: "ULS", traffic: "", useSpan: false, g: "", concreteFactor: "", q: "", earth: "", surcharge: "0", braking: "", extra: "0" },
+  { name: "Permanent actions and retained soil", limit: "SLS", traffic: "0", useSpan: false, spanModel: "", surfacingFactor: "1.3", g: "1", concreteFactor: "1", q: "0", earth: "", surcharge: "0", braking: "0", extra: "0" },
+  { name: "Traffic on approach behind abutment", limit: "ULS", traffic: "0", useSpan: false, spanModel: "", surfacingFactor: "", g: "", concreteFactor: "", q: "0", earth: "", surcharge: "", braking: "", extra: "0" },
+  { name: "Traffic on bridge deck", limit: "ULS", traffic: "", useSpan: false, spanModel: "M1600", surfacingFactor: "", g: "", concreteFactor: "", q: "", earth: "", surcharge: "0", braking: "", extra: "0" },
 ];
 
 export function actions(forces: Force[]) {
@@ -51,6 +52,12 @@ export function pileActions(positions: number[], normal: number, moment: number)
   return positions.map(x => normal / positions.length + (squared ? residual * (x - centre) / squared : 0));
 }
 
+const caseGuidance = [
+  "Deck and abutment self-weight plus retained soil pressure. Use this service case to review footing contact and service pressures without vehicle loading.",
+  "Vehicles on the retained approach can increase lateral pressure through surcharge. Include only braking and deck traffic actions justified by the load path and concurrency.",
+  "Vehicles on the deck increase the vertical seat reaction. For a road braking combination, use the concurrent M1600 reaction and design braking force per AS 5100.2 Clauses 7.8.2 and 7.10.",
+];
+
 const geometry = [
   ["length", "Abutment / footing length across bridge (m)"],
   ["height", "Retained height above base (m)"],
@@ -81,10 +88,13 @@ const caseFields = [
   ["extra", "Design additional horizontal force (kN)"],
 ] as const;
 
-export function AbutmentStability({ permanent, traffic }: { permanent: number; traffic: number }) {
+export function AbutmentStability({ permanent, superimposed, traffic, trafficOptions }: {
+  permanent: number; superimposed: number; traffic: number;
+  trafficOptions: { name: string; value: number }[];
+}) {
   const [foundation, setFoundation] = useState("spread");
   const [inputs, setInputs] = useState<Record<string, string>>({});
-  const [cases, setCases] = useState(initialCases);
+  const [cases, setCases] = useState(initialCases.map((item, i) => ({ ...item, template: i })));
   const [positions, setPositions] = useState("");
   const read = (raw?: string) => raw?.trim() ? Number(raw) : NaN;
   const value = (key: string) => read(inputs[key]);
@@ -107,8 +117,10 @@ export function AbutmentStability({ permanent, traffic }: { permanent: number; t
   const change = (index: number, patch: Partial<Case>) =>
     setCases(cases.map((item, i) => i === index ? { ...item, ...patch } : item));
 
-  return <section className="grid gap-5 border-t border-slate-400 pt-5">
-    <h2 className="text-xl font-semibold">Abutment and foundation checks</h2>
+  return <section aria-labelledby="foundation-checks" className="grid gap-5 border-t border-slate-400 pt-5">
+    <h2 id="foundation-checks" className="text-xl font-semibold">Abutment and foundation checks</h2>
+    <BankSeatDiagram view="abutment" />
+    <p>These are editable starter cases. Check the project combinations against AS 5100.2 Section 22 and the asset owner’s requirements. Use AS 5100.3 and the project geotechnical report for footing bearing resistance and serviceability limits.</p>
     <p>Use total forces for one abutment. Measure horizontal distances from the toe and heights from the base. Horizontal actions act towards the toe. The earth model assumes triangular active pressure and uniform surcharge over the full retained height.</p>
     <label className="grid max-w-sm gap-1">Foundation
       <select value={foundation} onChange={e => setFoundation(e.target.value)} className="rounded border p-2">
@@ -127,10 +139,13 @@ export function AbutmentStability({ permanent, traffic }: { permanent: number; t
     </div>
     <p>Concrete self-weight {display(weight)} kN · Unfactored active earth thrust {display(earth)} kN. Enter zero for unused actions and factors. Enter case-specific braking and surcharge as design values with any applicable factors already included.</p>
     {cases.map((item, i) => {
-      const q = item.useSpan ? traffic : read(item.traffic);
-      const loaded = hasGeometry && validSupport && nonnegative([permanent, q, ...caseFields.map(([key]) => read(item[key]))]);
+      const selectedTraffic = trafficOptions.length && item.spanModel
+        ? trafficOptions.find(row => row.name === item.spanModel)?.value ?? NaN : traffic;
+      const q = item.useSpan ? selectedTraffic : read(item.traffic);
+      const surfacingFactor = superimposed === 0 ? 0 : read(item.surfacingFactor);
+      const loaded = hasGeometry && validSupport && nonnegative([permanent, superimposed, surfacingFactor, q, ...caseFields.map(([key]) => read(item[key]))]);
       const a = loaded ? actions([
-        { vertical: permanent * read(item.g) + q * read(item.q), horizontal: 0, arm: value("bearing"), height: 0 },
+        { vertical: permanent * read(item.g) + superimposed * surfacingFactor + q * read(item.q), horizontal: 0, arm: value("bearing"), height: 0 },
         { vertical: weight * read(item.concreteFactor), horizontal: 0, arm: value("centroid"), height: 0 },
         { vertical: 0, horizontal: earth * read(item.earth), arm: 0, height: height / 3 },
         { vertical: 0, horizontal: value("ka") * read(item.surcharge) * height * length, arm: 0, height: height / 2 },
@@ -141,16 +156,29 @@ export function AbutmentStability({ permanent, traffic }: { permanent: number; t
       const p = a && foundation === "piles" ? pileActions(piles, a.normal, a.moment) : null;
       const pressureLimit = value(item.limit === "ULS" ? "ulsPressure" : "slsPressure");
       return <fieldset key={i} className="grid gap-3 rounded border border-slate-400 p-4">
-        <legend className="px-1 font-semibold">Case {i + 1}</legend>
+        <legend className="px-1 font-semibold">{item.name || "Load case"}</legend>
+        {caseGuidance[item.template] && <p>{caseGuidance[item.template]}</p>}
+        {item.template >= 0 && <BankSeatDiagram view="abutment" loadCase={item.template} />}
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <label className="grid gap-1">Case name<input className="rounded border p-2" value={item.name} onChange={e => change(i, { name: e.target.value })} /></label>
           <label className="grid gap-1">Limit state<select className="rounded border p-2" value={item.limit} onChange={e => change(i, { limit: e.target.value })}><option>SLS</option><option>ULS</option></select></label>
           <label className="grid gap-1">Concurrent deck traffic reaction (kN, incl. dynamics)
-            <input className="rounded border p-2" type="number" step="any" min="0" disabled={item.useSpan} value={item.useSpan ? Number.isFinite(traffic) ? traffic.toFixed(2) : "" : item.traffic} onChange={e => change(i, { traffic: e.target.value })} />
+            <input className="rounded border p-2" type="number" step="any" min="0" disabled={item.useSpan} value={item.useSpan ? Number.isFinite(selectedTraffic) ? selectedTraffic.toFixed(2) : "" : item.traffic} onChange={e => change(i, { traffic: e.target.value })} />
+          </label>
+          <label className="grid gap-1">Superimposed dead-load multiplier
+            <input className="rounded border p-2" type="number" step="any" min="0" disabled={superimposed === 0}
+              value={item.surfacingFactor} onChange={e => change(i, { surfacingFactor: e.target.value })} />
           </label>
           {caseFields.map(([key, label]) => <label key={key} className="grid gap-1">{label}<input className="rounded border p-2" type="number" step="any" min="0" value={item[key]} onChange={e => change(i, { [key]: e.target.value })} /></label>)}
         </div>
-        <label className="flex gap-2"><input type="checkbox" checked={item.useSpan} onChange={e => change(i, { useSpan: e.target.checked })} />Use peak span traffic reaction if concurrent with this case</label>
+        <label className="flex gap-2"><input type="checkbox" checked={item.useSpan} onChange={e => change(i, { useSpan: e.target.checked })} />Use calculated seat traffic reaction if applicable at the foundation</label>
+        {item.useSpan && trafficOptions.length > 0 && <label className="grid max-w-sm gap-1">Concurrent vehicle model
+          <select className="rounded border p-2" value={item.spanModel} onChange={e => change(i, { spanModel: e.target.value })}>
+            <option value="">Peak vertical reaction across all models</option>
+            {trafficOptions.map(row => <option key={row.name}>{row.name}</option>)}
+          </select>
+        </label>}
+        {item.useSpan && <p>Linked traffic uses the above-ground dynamic allowance and peak seat reaction. Enter a case-specific reaction manually where foundation depth, concurrent placement or load distribution requires a different value.</p>}
         {a ? <div className="grid gap-1">
           <p>Normal force {display(a.normal)} kN · Horizontal demand {display(a.horizontal)} kN</p>
           <p>Restoring moment {display(a.restoring)} kNm · Overturning moment {display(a.overturning)} kNm · Net moment about toe {display(a.moment)} kNm</p>
@@ -170,10 +198,11 @@ export function AbutmentStability({ permanent, traffic }: { permanent: number; t
             })}</tbody>
           </table></div> : <p>This pile layout cannot resolve the applied moment through axial forces.</p>)}
         </div> : <p>Enter the deck, foundation and case inputs to calculate.</p>}
-        {cases.length > 1 && <button type="button" className="justify-self-start underline" onClick={() => setCases(cases.filter((_, j) => i !== j))}>Remove case {i + 1}</button>}
+        {cases.length > 1 && <button type="button" className="justify-self-start underline" onClick={() => setCases(cases.filter((_, j) => i !== j))}>Remove {item.name || "load case"}</button>}
       </fieldset>;
     })}
-    <button type="button" className="justify-self-start rounded border px-3 py-2" onClick={() => setCases([...cases, { ...initialCases[2], name: "New load case" }])}>Add load case</button>
-    <p>Spread-footing sliding includes base friction only. Enter a geotechnical contact pressure limit for the applicable load case. Pile demand assumes a rigid cap, equal axial stiffness and bending about one axis. Verify pile lateral actions, group behaviour, settlement, water and uplift, concrete strength and reinforcement separately.</p>
+    <button type="button" className="justify-self-start rounded border px-3 py-2" onClick={() => setCases([...cases, { ...initialCases[2], template: -1, name: "New load case" }])}>Add load case</button>
+    <p>Spread-footing sliding includes base friction only. Toe and heel pressures use a linear, compression-only contact model. Enter a geotechnical pressure limit compatible with the peak contact pressure and limit state. Pile demand assumes a rigid cap, equal axial stiffness and bending about one axis. Verify pile lateral actions, group behaviour, settlement, water and uplift, concrete strength and reinforcement separately.</p>
   </section>;
 }
+
