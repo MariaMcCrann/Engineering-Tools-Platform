@@ -11,6 +11,7 @@ import { RationalMethodTool } from "./RationalMethodTool";
 import { SpillwayTool } from "./SpillwayTool";
 import { CulvertTool } from "./CulvertTool";
 import { BankSeatTool } from "./BankSeatTool";
+import { AbutmentStability } from "./AbutmentStability";
 import { LiftingBeamTool } from "./LiftingBeamTool";
 import { HeadlossTool } from "./HeadlossTool";
 import { PipeSizingTool, PipelineHglTool } from "./pipeline-tools";
@@ -33,7 +34,7 @@ import { SavedProjectsPanel, SaveProjectControl, CalculationTemplatesPanel, Save
 
 import { captureProjectInputs, restoreProjectInputs } from "./project-inputs";
 
-type ViewKey = "bank-seat" | "lifting-beams" | "design-review" | "design-checklist" | "tools" | "saved-projects" | "templates" | "rorb" | "rational" | "channel" | "storage" | "overland" | "rising" | "gsdm" | "spillway" | "culvert" | "headloss" | "pipe-sizing" | "pipeline-hgl" | "rock-protection" | "headwall-concrete" | "base-slab-concrete" | "broad-crested-weir" | "drowned-sluice-gate" | "thrust-at-bends" | "buried-flexible-pipe" | "v-notch-weir" | "pit-surge" | "pump-duty-point" | "cantilever-wall" | "sediment-pond" | "regulator-design" | "pipeline-pump-sizing" | "proposal" | "site-intelligence";
+type ViewKey = "abutment-foundations" | "bank-seat" | "lifting-beams" | "design-review" | "design-checklist" | "tools" | "saved-projects" | "templates" | "rorb" | "rational" | "channel" | "storage" | "overland" | "rising" | "gsdm" | "spillway" | "culvert" | "headloss" | "pipe-sizing" | "pipeline-hgl" | "rock-protection" | "headwall-concrete" | "base-slab-concrete" | "broad-crested-weir" | "drowned-sluice-gate" | "thrust-at-bends" | "buried-flexible-pipe" | "v-notch-weir" | "pit-surge" | "pump-duty-point" | "cantilever-wall" | "sediment-pond" | "regulator-design" | "pipeline-pump-sizing" | "proposal" | "site-intelligence";
 type ToolEntry = DashboardTool & { view: Exclude<ViewKey, "tools" | "saved-projects" | "templates"> };
 
 const TOOL_CATEGORIES: DashboardCategory[] = [
@@ -63,6 +64,7 @@ const TOOL_CATEGORIES: DashboardCategory[] = [
   ]},
   { key: "structures", label: "Structures", description: "Concrete headwalls, slabs and structural checks.", icon: "▥", tools: [
     { view: "lifting-beams", icon: "LB", label: "Lifting Beams", desc: "Bridge lifting beam actions, deflection, sling forces and directly calculated load envelopes. Preliminary member checks.", badge: "New" },
+    { view: "abutment-foundations", icon: "AF", label: "Abutment and Foundations", desc: "Check abutment stability, spread footing contact and pile axial demands." },
     { view: "bank-seat", icon: "BS", label: "Bridge Bank Seat", desc: "Calculate deck and moving traffic reactions and check local bearing demand." },
     { view: "headwall-concrete", icon: "HW", label: "Headwall Concrete", desc: "AS 3600 headwall bending, minimum steel and shear screening checks." },
     { view: "base-slab-concrete", icon: "BS", label: "Base Slab Concrete", desc: "AS 3600 reinforced base-slab design checks from the supplied workbook." },
@@ -154,6 +156,7 @@ export default function Home() {
     : view === "pipeline-hgl" ? <>{toolHeader("Pipeline HGL", "pipeline-hgl")}<PipelineHglTool/></>
     : view === "rock-protection" ? <>{toolHeader("Rock Protection / Riprap", "rock-protection")}<RockProtectionTool/></>
     : view === "lifting-beams" ? <><header className="hub-header"><span>Lifting Beams</span><a href="/lifting-beams" target="_blank" rel="noopener noreferrer">Open full page</a></header><LiftingBeamTool/></>
+    : view === "abutment-foundations" ? <>{toolHeader("Abutment and Foundations", "abutment-foundations")}<div className="max-w-5xl p-6"><AbutmentStability /></div></>
     : view === "bank-seat" ? <>{toolHeader("Bridge Bank Seat", "bank-seat")}<BankSeatTool/></>
     : view === "headwall-concrete" ? <>{toolHeader("Headwall Concrete", "headwall-concrete")}<HeadwallStructuralTool/></>
     : view === "base-slab-concrete" ? <>{toolHeader("Base Slab Concrete", "base-slab-concrete")}<BaseSlabStructuralTool/></>
@@ -198,3 +201,4 @@ export default function Home() {
     {showHandbook && <div className="dashboard-modal-backdrop" onClick={() => setShowHandbook(false)}><div className="dashboard-modal handbook-modal" onClick={(e) => e.stopPropagation()}><button className="modal-close" onClick={() => setShowHandbook(false)}>×</button><p className="eyebrow">TECHNICAL BASIS & TRACEABILITY</p><h2>Engineering Handbook</h2><p className="modal-lead">A single place for the source documents, manuals, standards and engineering methods used by the tools.</p><div className="handbook-list">{HANDBOOK_ITEMS.map((item) => <div key={item.title}><span>▤</span><div><strong>{item.title}</strong><small>{item.detail}{item.size ? ` · PDF · ${item.size}` : ""}</small>{item.href && <div className="handbook-document-actions"><a href={item.href} target="_blank" rel="noopener noreferrer">Open PDF ↗</a><a href={item.href} download>↓ Download</a></div>}</div></div>)}</div><div className="handbook-note"><strong>Next step</strong><span>Each calculator can link directly to the references and assumptions that support its methodology.</span></div></div></div>}
   </main>;
 }
+
