@@ -120,7 +120,7 @@ export function AbutmentStability({ permanent, superimposed, traffic, trafficOpt
   return <section aria-labelledby="foundation-checks" className="grid gap-5 border-t border-slate-400 pt-5">
     <h2 id="foundation-checks" className="text-xl font-semibold">Abutment and foundation checks</h2>
     <BankSeatDiagram view="abutment" />
-    <p>These are editable starter cases. Check the project combinations against AS 5100.2 Section 22 and the asset owner’s requirements. Use AS 5100.3 and the project geotechnical report for footing bearing resistance and serviceability limits.</p>
+    <p>These are editable starter cases. Check the project combinations against AS 5100.2 Clause 23 and the asset owner’s requirements. Use AS 5100.3 and the project geotechnical report for footing bearing resistance and serviceability limits.</p>
     <p>Use total forces for one abutment. Measure horizontal distances from the toe and heights from the base. Horizontal actions act towards the toe. The earth model assumes triangular active pressure and uniform surcharge over the full retained height.</p>
     <label className="grid max-w-sm gap-1">Foundation
       <select value={foundation} onChange={e => setFoundation(e.target.value)} className="rounded border p-2">
