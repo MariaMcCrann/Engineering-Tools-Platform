@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AbutmentStability } from "./AbutmentStability";
+import { abutmentPath, seatTransferKey, type SeatReactions } from "./bank-seat-transfer";
 import { peakReaction, rectangularContactArea, sm1600Reactions } from "./bank-seat-traffic";
 import { BankSeatDiagram } from "./BankSeatDiagrams";
 
@@ -129,6 +129,24 @@ export function BankSeatTool() {
         value={values[key] ?? ""} onChange={event => setValues({ ...values, [key]: event.target.value })} />
     </label>
   );
+  const openAbutment = () => {
+    const available = (value: number) => Number.isFinite(value) && value >= 0 ? value : null;
+    const reactions: SeatReactions = {
+      permanent: available(valid ? permanent : NaN),
+      superimposed: available(valid ? surfacing : NaN),
+      traffic: available(traffic),
+      trafficOptions: model === "sm1600" ? roadLoads.filter(row => Number.isFinite(row.total))
+        .map(row => ({ name: row.name, value: row.total })) : [],
+    };
+    let destination = abutmentPath;
+    try {
+      window.sessionStorage.setItem(seatTransferKey, JSON.stringify(reactions));
+      destination += "?from-seat=1";
+    } catch {
+      // The destination also supports manual entry if browser storage is unavailable.
+    }
+    window.location.assign(destination);
+  };
   const resultList = (items: [string, number, string][]) => (
     <dl aria-live="polite" className="grid gap-3 rounded border border-slate-400 p-4 sm:grid-cols-3">
       {items.map(([label, value, unit]) => <div key={label}><dt>{label}</dt><dd className="font-semibold">{format(value, unit)}</dd></div>)}
@@ -139,12 +157,11 @@ export function BankSeatTool() {
     <div className="grid max-w-5xl gap-8 p-6">
       <nav aria-label="Bridge bank seat checks" className="flex flex-wrap gap-x-5 gap-y-2 underline">
         <a href="#deck-actions">Deck reactions</a>
-        <a href="#local-bearing">Pad contact check</a>
-        <a href="#foundation-checks">Abutment and foundations</a>
+        <a href="#local-bearing">Beam-to-seat contact</a>
       </nav>
       <section className="grid gap-4" aria-labelledby="deck-actions">
         <h2 id="deck-actions" className="text-xl font-semibold">Deck reactions at the bank seat</h2>
-        <p>Calculate the total vertical reaction at one end of a simply supported span. Beam and kerb weights are assumed symmetric.</p>
+        <p>The results are for one seat at one end of a simply supported span. Each end takes 50% of the total beam and kerb self-weight under the assumed symmetric loading. The beam weight split is already included.</p>
         <BankSeatDiagram view="span" />
         <fieldset className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <legend className="mb-3 font-semibold">Span geometry and permanent loads</legend>
@@ -198,9 +215,9 @@ export function BankSeatTool() {
         {resultList(results)}
       </section>
       <section className="grid gap-4 border-t border-slate-400 pt-5" aria-labelledby="local-bearing">
-        <h2 id="local-bearing" className="text-xl font-semibold">Pad contact check</h2>
+        <h2 id="local-bearing" className="text-xl font-semibold">Beam-to-seat contact check</h2>
         <BankSeatDiagram view="pad" />
-        <p>Check compression beneath one bearing pad or contact patch. Design the reinforced-concrete bank seat separately using the bearing positions, seat geometry and support conditions. That design establishes the overall dimensions and reinforcement for flexure, shear or strut-and-tie action, anchorage and detailing.</p>
+        <p>Check compression beneath one beam end, either in direct contact with the seat or through a bearing pad. Design the reinforced-concrete bank seat separately using the bearing positions, seat geometry and support conditions. That design establishes the overall dimensions and reinforcement for flexure, shear or strut-and-tie action, anchorage and detailing.</p>
         <label className="grid max-w-md gap-1">Source of pad reactions
           <select className="rounded border border-slate-400 p-2" value={padSource} onChange={event => setPadSource(event.target.value)}>
             <option value="linked">Use a share of the deck reactions above</option>
@@ -208,7 +225,7 @@ export function BankSeatTool() {
           </select>
         </label>
         {linkedPad ? <>
-          <p>Enter the percentage of each deck reaction carried by this pad, based on the bearing layout and transverse load distribution. Structural dead load includes the other structural reaction entered above. Use 100% only for an action carried entirely through this contact. Check the traffic case and share together for the pad being assessed.</p>
+          <p>The percentages apply to one beam contact as a share of the reaction already calculated for one seat. For example, 10 identical beams with equal self-weight reactions each carry 10% of the beam self-weight at that seat. Traffic shares depend on transverse load distribution. Structural dead load includes the other structural reaction entered above. Use 100% only for an action carried entirely through this contact. Check the traffic case and share together for the pad being assessed.</p>
           {model === "sm1600" && <label className="grid max-w-md gap-1">Traffic model for this pad
             <select className="rounded border border-slate-400 p-2" value={padTrafficModel} onChange={event => setPadTrafficModel(event.target.value)}>
               <option value="">Governing whole-seat traffic reaction</option>
@@ -222,13 +239,18 @@ export function BankSeatTool() {
           </div>
         </> : <div className="grid gap-4 sm:grid-cols-3">{optional.slice(6, 9).map(field => input(field))}</div>}
         {resultList(padActions)}
-        <p>Use the loaded contact dimensions for full rectangular contact. For partial contact, eccentric loading or a bearing with a specified effective area, enter a verified area.</p>
+        <p>For direct contact, use the actual loaded beam underside width and the loaded length along the span. Where a pad is installed, use its loaded dimensions for full rectangular contact. For partial contact, eccentric loading or a bearing with a specified effective area, enter a verified area.</p>
         <div className="grid gap-4 sm:grid-cols-3">{optional.slice(9).map(field => input(field))}</div>
         <p>Local ULS bearing resistance is the design force capacity in kN of the governing pad or supporting concrete check. Refer to AS 5100.4 for bridge bearings and AS 5100.5 for supporting concrete. Use the footing checks below for soil bearing pressure in kPa.</p>
         {resultList(localResults)}
       </section>
-      <AbutmentStability permanent={valid ? permanent : NaN} superimposed={valid ? surfacing : NaN}
-        traffic={traffic} trafficOptions={model === "sm1600" ? roadLoads.map(row => ({ name: row.name, value: row.total })) : []} />
+      <div className="grid justify-items-start gap-2 border-t border-slate-400 pt-5">
+        <button type="button" className="rounded bg-blue-800 px-4 py-2 font-semibold text-white" onClick={openAbutment}>
+          Open abutment and foundation calculations
+        </button>
+        <p>The abutment tool receives the unfactored whole-seat reactions above, with dynamics included in traffic.</p>
+      </div>
     </div>
   );
 }
+
