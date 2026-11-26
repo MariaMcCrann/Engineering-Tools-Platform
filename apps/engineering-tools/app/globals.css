@@ -5,6 +5,9 @@
 body { margin:0; background:#f3f5f8; color:var(--ink); font-family:Arial, Helvetica, sans-serif; }
 button,input,select { font:inherit; }
 .app-shell { min-height:100vh; display:grid; grid-template-columns:214px 1fr; }
+.app-shell:not(:has(> .sidebar)) { display:block; }
+.bridge-tool .calc-fields { align-items:end; }
+.bridge-tool .storage-table td.pass,.bridge-tool .storage-table td.fail { font-weight:700; }
 .sidebar { position:sticky; top:0; height:100vh; background:#fff; border-right:1px solid #dbe2eb; display:flex; flex-direction:column; }
 .brand { height:114px; display:flex; align-items:center; gap:10px; padding:0 16px; border-bottom:1px solid #dde4ec; color:#6d7e92; font-size:8px; line-height:1.2; }
 .personal-mark { width:34px; height:34px; border-radius:50%; object-fit:cover; }

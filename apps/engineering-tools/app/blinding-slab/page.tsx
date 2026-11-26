@@ -2,9 +2,9 @@ import { BlindingSlabTool } from "../BlindingSlabTool";
 
 export default function BlindingSlabPage() {
   return (
-    <main className="min-h-screen">
-      <section className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6">
-        <header><h1 className="text-2xl font-semibold">Blinding Slab</h1></header>
+    <main className="app-shell">
+      <section className="workspace" style={{ marginLeft: 0 }}>
+        <header className="hub-header"><span>Blinding Slab</span><a href="/">All engineering tools</a></header>
         <BlindingSlabTool />
       </section>
     </main>
