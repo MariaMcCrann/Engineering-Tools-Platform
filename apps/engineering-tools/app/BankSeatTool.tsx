@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import { abutmentPath, seatTransferKey, type SeatReactions } from "./bank-seat-transfer";
+import { useEffect, useState } from "react";
+import { abutmentInputsKey, loadState, openBridgeTool, saveState, seatInputsKey, seatTransferKey, useClientReady, type SeatReactions } from "./bank-seat-transfer";
 import { peakReaction, rectangularContactArea } from "./bank-seat-traffic";
 import { BankSeatDiagram } from "./BankSeatDiagrams";
 import { AS5100_FACTORS as F, EXAMPLE_SEAT as E, brakingForce, designLanes, permanentSeatReaction, seatTraffic } from "./bridge-calcs";
-import { Card, Check, Field, Metric, ResultHero, Select, TitleRow, fmt } from "./BridgeUi";
+import { BridgeSteps, Card, Check, Field, Metric, ResultHero, Select, TitleRow, fmt } from "./BridgeUi";
 
 const initial: Record<string, string> = {
   span: String(E.span), width: String(E.width), beams: String(E.beams), beamMass: String(E.beamMass),
@@ -16,12 +16,20 @@ const initial: Record<string, string> = {
   padLength: "", padWidth: "", area: "", resistance: "",
 };
 
+type SavedSeat = { v: Record<string, string>; model: string; train: string; padSource: string; padModel: string };
+
 export function BankSeatTool() {
-  const [v, setV] = useState(initial);
-  const [model, setModel] = useState("sm1600");
-  const [train, setTrain] = useState("");
-  const [padSource, setPadSource] = useState("linked");
-  const [padModel, setPadModel] = useState("");
+  const ready = useClientReady();
+  // Remount once in the browser so inputs saved earlier in this session are restored.
+  return <BankSeatForm key={ready ? "client" : "server"} saved={ready ? loadState<SavedSeat>(seatInputsKey) : null} persist={ready} />;
+}
+
+function BankSeatForm({ saved, persist }: { saved: SavedSeat | null; persist: boolean }) {
+  const [v, setV] = useState(() => ({ ...initial, ...(saved?.v ?? {}) }));
+  const [model, setModel] = useState(saved?.model ?? "sm1600");
+  const [train, setTrain] = useState(saved?.train ?? "");
+  const [padSource, setPadSource] = useState(saved?.padSource ?? "linked");
+  const [padModel, setPadModel] = useState(saved?.padModel ?? "");
   const n = (key: string) => v[key]?.trim() ? Number(v[key]) : NaN;
   const set = (key: string) => (value: string) => setV({ ...v, [key]: value });
   const field = (key: string, label: string, unit?: string, hint?: string, placeholder?: string) =>
@@ -59,22 +67,31 @@ export function BankSeatTool() {
   const pressure = area > 0 ? 1000 * padUls / area : NaN;
   const utilisation = n("resistance") > 0 ? padUls / n("resistance") : NaN;
 
+  const ok = (value: number) => Number.isFinite(value) && value >= 0 ? value : null;
+  const reactions: SeatReactions = {
+    permanent: ok(permanent), superimposed: ok(surfacing), traffic: ok(traffic),
+    trafficOptions: model === "sm1600" ? roadLoads.map(row => ({ name: row.name, value: row.total })) : [],
+    span: ok(span), lanes: model === "sm1600" ? lanes : null, braking: braking ? braking.design : null,
+    governing: model === "sm1600" ? governing?.name ?? null : "Project-specific axle train",
+  };
+  const reactionsJson = JSON.stringify(reactions);
+  // Keep the inputs and the latest deck actions in this browser session so the abutment tool can use them
+  // and coming back here shows the same values.
+  useEffect(() => { if (persist) saveState(seatInputsKey, { v, model, train, padSource, padModel }); }, [persist, v, model, train, padSource, padModel]);
+  useEffect(() => { if (persist) saveState(seatTransferKey, JSON.parse(reactionsJson)); }, [persist, reactionsJson]);
   const openAbutment = () => {
-    const ok = (value: number) => Number.isFinite(value) && value >= 0 ? value : null;
-    const reactions: SeatReactions = {
-      permanent: ok(permanent), superimposed: ok(surfacing), traffic: ok(traffic),
-      trafficOptions: model === "sm1600" ? roadLoads.map(row => ({ name: row.name, value: row.total })) : [],
-      span: ok(span), lanes: model === "sm1600" ? lanes : null, braking: braking ? braking.design : null,
-    };
-    let destination = abutmentPath;
-    try { window.sessionStorage.setItem(seatTransferKey, JSON.stringify(reactions)); destination += "?from-seat=1"; } catch { /* manual entry still works */ }
-    window.location.assign(destination);
+    saveState(seatTransferKey, reactions);
+    // "Next" means carry these deck actions forward, so switch the abutment tool to Bank Seat values.
+    const abutment = loadState<Record<string, unknown>>(abutmentInputsKey);
+    if (abutment) saveState(abutmentInputsKey, { ...abutment, deckSource: "seat" });
+    openBridgeTool("abutment-foundations");
   };
 
   return <div className="content calc-content bridge-tool">
     <TitleRow eyebrow="BRIDGE SUBSTRUCTURE · AS 5100.2" title="Bridge Bank Seat"
       subtitle="Deck reactions at one bank seat of a simply supported span with SM1600 traffic, AS 5100.2 load factors and a beam-to-seat bearing check." />
-    <div className="warning"><div>i</div><p>Example values are loaded so you can see how the tool works. Replace them with your project values. Grey fields are optional.</p></div>
+    <BridgeSteps current="bank-seat" onOpen={openBridgeTool} />
+    <div className="warning"><div>i</div><p>{saved ? "Your inputs from earlier in this session are restored. " : "Example values are loaded so you can see how the tool works. Replace them with your project values. "}The deck actions are kept for the Abutment and Foundations step.</p></div>
     <div className="calc-layout"><div>
       <Card step="1" title="Span and permanent loads">
         <BankSeatDiagram view="span" />
@@ -185,7 +202,7 @@ export function BankSeatTool() {
       {braking && <Metric name="Braking force (unfactored)" value={`${fmt(braking.design, 1)} kN`} />}
       {Number.isFinite(utilisation) && <Metric name="Bearing utilisation" value={`${fmt(100 * utilisation, 0)} %`} />}
       <button type="button" className="download-btn" onClick={openAbutment}>Next: abutment and foundations →</button>
-      <p className="answer-note" style={{ marginTop: 12 }}>Sends the unfactored seat reactions, span, lanes and braking force to the abutment tool. Design the reinforced concrete seat itself separately.</p>
+      <p className="answer-note" style={{ marginTop: 12 }}>The unfactored seat reactions, span, lanes and braking force are available in the abutment tool under &quot;Use Bank Seat deck actions&quot;. Design the reinforced concrete seat itself separately.</p>
     </aside></div>
   </div>;
 }

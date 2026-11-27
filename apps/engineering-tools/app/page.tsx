@@ -13,6 +13,7 @@ import { CulvertTool } from "./CulvertTool";
 import { BlindingSlabTool } from "./BlindingSlabTool";
 import { BankSeatTool } from "./BankSeatTool";
 import { AbutmentStability } from "./AbutmentStability";
+import { openToolEvent } from "./bank-seat-transfer";
 import { LiftingBeamTool } from "./LiftingBeamTool";
 import { HeadlossTool } from "./HeadlossTool";
 import { PipeSizingTool, PipelineHglTool } from "./pipeline-tools";
@@ -102,6 +103,18 @@ export default function Home() {
   const goHome = () => { setActiveProject(null); setView("tools"); setDashboardKey((k) => k + 1); };
 
   useEffect(() => { setSavedProjects(loadSavedProjects()); }, []);
+  useEffect(() => {
+    // Bridge tools ask to switch between Bank Seat and Abutment and Foundations without leaving the dashboard.
+    const open = (event: Event) => {
+      const target = (event as CustomEvent<string>).detail;
+      if (target !== "bank-seat" && target !== "abutment-foundations") return;
+      event.preventDefault();
+      setActiveProject(null);
+      setView(target);
+    };
+    window.addEventListener(openToolEvent, open);
+    return () => window.removeEventListener(openToolEvent, open);
+  }, []);
 
   const saveProject = (project: SavedProject) => {
     const inputs = toolRoot.current ? captureProjectInputs(toolRoot.current) : [];

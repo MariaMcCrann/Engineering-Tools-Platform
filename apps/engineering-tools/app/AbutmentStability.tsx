@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useState } from "react";
 import { BankSeatDiagram } from "./BankSeatDiagrams";
-import { parseSeatTransfer, readSeatTransfer } from "./bank-seat-transfer";
+import { abutmentInputsKey, loadState, openBridgeTool, parseSeatTransfer, readSeatTransfer, saveState, useClientReady, type SeatReactions } from "./bank-seat-transfer";
 import { DEFAULT_CASES, actions, brakingForce, contact, exampleSeatReactions, pileActions, pileResistance, type CaseFactors } from "./bridge-calcs";
-import { Card, Check, Field, Metric, ResultHero, Select, TitleRow, fmt } from "./BridgeUi";
+import { BridgeSteps, Card, Check, Field, Metric, ResultHero, Select, TitleRow, fmt } from "./BridgeUi";
 
 export { actions, contact, pileActions } from "./bridge-calcs";
 
@@ -20,23 +20,41 @@ const defaults: Record<string, string> = {
   positions: "0.15, 0.55", perRow: "3", pileD: "0.3", pileL: "9", qb: "200", fs: "20", pilePhi: "0.5", compression: "", uplift: "",
 };
 
-const subscribe = () => () => {};
-const empty = () => "";
+type FactorStrings = Record<keyof CaseFactors, string>;
+type SavedAbutment = { v: Record<string, string>; foundation: string; factors: FactorStrings[]; deckSource: string; seatModel: string };
 
 export function AbutmentStability() {
-  const linked = parseSeatTransfer(useSyncExternalStore(subscribe, readSeatTransfer, empty));
+  const ready = useClientReady();
+  // Remount once in the browser to pick up saved inputs and the latest Bank Seat deck actions.
+  return <AbutmentForm key={ready ? "client" : "server"} persist={ready}
+    saved={ready ? loadState<SavedAbutment>(abutmentInputsKey) : null}
+    seat={ready ? parseSeatTransfer(readSeatTransfer()) : null} />;
+}
+
+const plain = (x: number) => fmt(x, 1).replace(/,/g, "");
+
+function AbutmentForm({ saved, seat, persist }: { saved: SavedAbutment | null; seat: SeatReactions | null; persist: boolean }) {
   const example = exampleSeatReactions();
-  const source = linked ?? example;
-  const exampleBraking = brakingForce(source.span ?? NaN, source.lanes ?? NaN)?.design ?? 0;
+  const exampleBraking = brakingForce(example.span, example.lanes)?.design ?? 0;
+  const seatBraking = seat ? seat.braking ?? brakingForce(seat.span ?? NaN, seat.lanes ?? NaN)?.design ?? 0 : NaN;
   const [v, setV] = useState<Record<string, string>>(() => ({
-    ...defaults,
-    deckPermanent: fmt(source.permanent ?? 0, 1).replace(/,/g, ""),
-    deckSuperimposed: fmt(source.superimposed ?? 0, 1).replace(/,/g, ""),
-    deckTraffic: fmt(source.traffic ?? 0, 1).replace(/,/g, ""),
-    braking: fmt(linked?.braking ?? exampleBraking, 1).replace(/,/g, ""),
+    ...defaults, brakingShare: "100",
+    deckPermanent: plain(seat?.permanent ?? example.permanent),
+    deckSuperimposed: plain(seat?.superimposed ?? example.superimposed),
+    deckTraffic: plain(seat?.traffic ?? example.traffic),
+    braking: plain(seat ? seatBraking : exampleBraking),
+    ...(saved?.v ?? {}),
   }));
-  const [foundation, setFoundation] = useState("spread");
-  const [cases, setCases] = useState(() => DEFAULT_CASES.map(c => ({ ...c, factors: Object.fromEntries(Object.entries(c.factors).map(([k, x]) => [k, String(x)])) as Record<keyof CaseFactors, string> })));
+  const [foundation, setFoundation] = useState(saved?.foundation ?? "spread");
+  // Only an explicit choice is remembered; otherwise Bank Seat values are used whenever they exist.
+  const [deckChoice, setDeckSource] = useState<string>(saved?.deckSource ?? "");
+  const deckSource = deckChoice || (seat ? "seat" : "manual");
+  const [seatModel, setSeatModel] = useState(saved?.seatModel ?? "");
+  const [cases, setCases] = useState(() => DEFAULT_CASES.map((c, i) => ({ ...c,
+    factors: saved?.factors?.[i] ?? Object.fromEntries(Object.entries(c.factors).map(([k, x]) => [k, String(x)])) as FactorStrings })));
+  useEffect(() => {
+    if (persist) saveState(abutmentInputsKey, { v, foundation, factors: cases.map(c => c.factors), deckSource: deckChoice, seatModel });
+  }, [persist, v, foundation, cases, deckChoice, seatModel]);
   const n = (key: string) => v[key]?.trim() ? Number(v[key]) : NaN;
   const set = (key: string) => (value: string) => setV({ ...v, [key]: value });
   const field = (key: string, label: string, unit?: string, hint?: string) =>
@@ -44,7 +62,12 @@ export function AbutmentStability() {
   const setFactor = (i: number, key: keyof CaseFactors, value: string) =>
     setCases(cases.map((c, j) => j === i ? { ...c, factors: { ...c.factors, [key]: value } } : c));
 
-  const P = n("deckPermanent"), S = n("deckSuperimposed"), Q = n("deckTraffic"), B = n("braking");
+  const fromSeat = deckSource === "seat" && seat !== null;
+  const seatTraffic = seat ? seatModel ? seat.trafficOptions.find(row => row.name === seatModel)?.value ?? NaN : seat.traffic ?? NaN : NaN;
+  const P = fromSeat ? seat.permanent ?? NaN : n("deckPermanent");
+  const S = fromSeat ? seat.superimposed ?? 0 : n("deckSuperimposed");
+  const Q = fromSeat ? seatTraffic : n("deckTraffic");
+  const B = fromSeat ? seatBraking * n("brakingShare") / 100 : n("braking");
   const L = n("length"), W = n("width"), H = n("height");
   const selfWeight = n("volume") * n("concrete");
   const earth = 0.5 * n("ka") * n("density") * H ** 2 * L;
@@ -101,16 +124,38 @@ export function AbutmentStability() {
   return <div className="content calc-content bridge-tool">
     <TitleRow eyebrow="BRIDGE SUBSTRUCTURE · AS 5100.2 / AS 5100.3" title="Abutment and Foundations"
       subtitle="Bearing, overturning and sliding checks for a bridge abutment on a spread footing or piles, using AS 5100.2 load combinations." />
-    <div className="warning"><div>i</div><p>{linked ? "Deck reactions came from the Bridge Bank Seat tool. You can still edit them."
-      : <>Example values are loaded. Start from <a href="/bank-seat">Bridge Bank Seat</a> to bring your deck reactions across, or type them in below.</>}</p></div>
+    <BridgeSteps current="abutment-foundations" onOpen={openBridgeTool} />
+    {!saved && <div className="warning"><div>i</div><p>Example values are loaded for the abutment. Replace them with your project values.</p></div>}
     <div className="calc-layout"><div>
       <Card step="1" title="Deck actions at this abutment (unfactored)">
-        <div className="calc-fields">
+        <div className="bridge-source" role="radiogroup" aria-label="Source of deck actions">
+          <button type="button" role="radio" aria-checked={fromSeat} className={fromSeat ? "selected" : ""} disabled={!seat} onClick={() => setDeckSource("seat")}>
+            <strong>Use Bank Seat deck actions</strong><small>{seat ? "Latest values calculated in Bridge Bank Seat" : "Not available yet. Open Bridge Bank Seat first"}</small></button>
+          <button type="button" role="radio" aria-checked={!fromSeat} className={!fromSeat ? "selected" : ""} onClick={() => setDeckSource("manual")}>
+            <strong>Enter deck actions manually</strong><small>Type your own reactions</small></button>
+        </div>
+        {fromSeat ? <>
+          <div className="storage-table" style={{ maxHeight: "none" }}><table><tbody>
+            <tr><td style={{ textAlign: "left" }}>Span / design lanes</td><td>{fmt(seat.span ?? NaN, 2)} m / {seat.lanes ?? "—"}</td></tr>
+            <tr><td style={{ textAlign: "left" }}>Deck dead load reaction G</td><td>{fmt(P, 1)} kN</td></tr>
+            <tr><td style={{ textAlign: "left" }}>Superimposed dead load reaction</td><td>{fmt(S, 1)} kN</td></tr>
+            <tr><td style={{ textAlign: "left" }}>Traffic reaction incl. dynamics Q</td><td>{fmt(Q, 1)} kN ({seatModel || seat.governing || "governing"})</td></tr>
+            <tr><td style={{ textAlign: "left" }}>Braking force from Bank Seat</td><td>{fmt(seatBraking, 1)} kN</td></tr>
+          </tbody></table></div>
+          <div className="calc-fields" style={{ marginTop: 14 }}>
+            {seat.trafficOptions.length > 0 && <Select label="Traffic model for the abutment" value={seatModel} onChange={setSeatModel} hint="Governing gives the largest reaction">
+              <option value="">Governing ({seat.governing ?? "largest"})</option>
+              {seat.trafficOptions.map(row => <option key={row.name} value={row.name}>{row.name}, {fmt(row.value, 1)} kN</option>)}
+            </Select>}
+            {field("brakingShare", "Share of braking at this abutment", "%", `${fmt(B, 1)} kN applied. Reduce if bearings share it`)}
+          </div>
+          <button type="button" className="link-btn" onClick={() => openBridgeTool("bank-seat")}>← Change these in Bridge Bank Seat</button>
+        </> : <div className="calc-fields">
           {field("deckPermanent", "Deck dead load reaction", "kN")}
           {field("deckSuperimposed", "Superimposed dead load reaction", "kN")}
           {field("deckTraffic", "Traffic reaction incl. dynamics", "kN", "SM1600 governing reaction")}
           {field("braking", "Braking force at this abutment", "kN", "Cl 7.8.2. Reduce if shared by bearings")}
-        </div>
+        </div>}
       </Card>
 
       <Card step="2" title="Abutment geometry and backfill">
@@ -207,6 +252,8 @@ export function AbutmentStability() {
       <Metric name="Deck reaction G + SDL + Q" value={`${fmt(P + S + Q, 1)} kN`} />
       <Metric name="Braking force" value={`${fmt(B, 1)} kN`} />
       {foundation === "spread" && <Metric name="ULS bearing limit φg·qult" value={`${fmt(ulsLimit, 0)} kPa`} />}
+      <Metric name="Deck actions from" value={fromSeat ? "Bridge Bank Seat" : "Manual entry"} />
+      <button type="button" className="link-btn" onClick={() => openBridgeTool("bank-seat")}>← Back to Bridge Bank Seat</button>
       <p className="answer-note" style={{ marginTop: 12 }}>Confirm bearing capacity, settlement, scour and groundwater with the geotechnical report. Design the reinforcement separately.</p>
     </aside></div>
   </div>;
