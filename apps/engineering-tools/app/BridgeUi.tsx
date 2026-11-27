@@ -36,3 +36,14 @@ export function TitleRow({ eyebrow, title, subtitle }: { eyebrow: string; title:
 export function ResultHero({ label, value, unit }: { label: string; value: string; unit?: string }) {
   return <div className="result-hero result-main"><span>{label}</span>{" "}<strong>{value}</strong>{unit && <>{" "}<small>{unit}</small></>}</div>;
 }
+
+export function BridgeSteps({ current, onOpen }: { current: "bank-seat" | "abutment-foundations"; onOpen: (view: "bank-seat" | "abutment-foundations") => void }) {
+  const steps = [["bank-seat", "1", "Bridge Bank Seat", "Deck actions"], ["abutment-foundations", "2", "Abutment and Foundations", "Stability and bearing"]] as const;
+  return <nav className="bridge-steps" aria-label="Bridge design steps">
+    {steps.map(([view, num, label, sub], i) => <span key={view} className="bridge-step-wrap">
+      {i > 0 && <span className="bridge-step-arrow" aria-hidden="true">→</span>}
+      <button type="button" className={view === current ? "bridge-step active" : "bridge-step"} aria-current={view === current ? "step" : undefined}
+        onClick={() => view !== current && onOpen(view)}><b>{num}</b><span><strong>{label}</strong><small>{sub}</small></span></button>
+    </span>)}
+  </nav>;
+}
